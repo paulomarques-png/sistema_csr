@@ -1,6 +1,7 @@
 /vendor/
 /node_modules/
 /.env
+/Senha_Temp
 
 # arquivos do XAMPP / sistema
 *.log
