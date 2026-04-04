@@ -382,3 +382,267 @@ footer a:hover { opacity: 1; }
     .card { padding: 16px; }
     th, td { padding: 7px 8px; font-size: 13px; }
 }
+
+/* ================================================================
+   DASHBOARD
+   ================================================================ */
+
+/* ── Banners de horário (3 em linha) ─────────────────────────── */
+.banners-horario {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+}
+.banners-horario .banner-status {
+    margin-bottom: 0;
+    font-size: 13px;
+    padding: 10px 14px;
+}
+
+/* ── Botões de operação ──────────────────────────────────────── */
+.botoes-operacao {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+}
+
+.btn-operacao {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 18px 24px;
+    border-radius: var(--raio);
+    text-decoration: none;
+    font-weight: 700;
+    transition: transform .15s, filter .15s;
+    min-width: 130px;
+    box-shadow: var(--sombra);
+}
+.btn-operacao:hover {
+    transform: translateY(-2px);
+    filter: brightness(1.08);
+}
+.btn-operacao:active { transform: scale(.97); }
+
+.btn-op-icone { font-size: 28px; line-height: 1; }
+.btn-op-label { font-size: 13px; text-align: center; }
+
+.btn-op-saida     { background: var(--primaria); color: white; }
+.btn-op-retorno   { background: var(--acento);   color: white; }
+.btn-op-venda     { background: var(--verde);    color: white; }
+.btn-op-relatorio { background: #6f42c1;         color: white; }
+.btn-op-cadastro  { background: #495057;         color: white; }
+
+/* ── Legenda de cores da tabela ──────────────────────────────── */
+.legenda-cores {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--cinza-claro);
+    font-size: 12px;
+    color: var(--cinza-texto);
+}
+.legenda-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.legenda-bolinha {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+}
+
+/* ── Responsivo mobile ───────────────────────────────────────── */
+@media (max-width: 600px) {
+    .banners-horario {
+        grid-template-columns: 1fr;
+    }
+    .botoes-operacao {
+        justify-content: center;
+    }
+    .btn-operacao {
+        min-width: 100px;
+        padding: 14px 16px;
+    }
+    .btn-op-icone { font-size: 22px; }
+}
+
+/* ================================================================
+   CADASTROS — Abas
+   ================================================================ */
+
+.abas {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid var(--cinza);
+}
+
+.aba {
+    padding: 10px 20px;
+    border-radius: var(--raio) var(--raio) 0 0;
+    text-decoration: none;
+    color: var(--cinza-texto);
+    font-weight: 600;
+    font-size: 14px;
+    border: 1px solid transparent;
+    border-bottom: none;
+    transition: background .15s, color .15s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.aba:hover { background: var(--cinza-claro); color: var(--primaria); }
+.aba-ativa {
+    background: white;
+    color: var(--primaria);
+    border-color: var(--cinza);
+    border-bottom-color: white;
+    margin-bottom: -2px;
+}
+.aba-badge {
+    background: var(--cinza);
+    color: #555;
+    border-radius: 10px;
+    padding: 1px 7px;
+    font-size: 11px;
+}
+.aba-ativa .aba-badge {
+    background: var(--primaria);
+    color: white;
+}
+
+/* ================================================================
+   GRADE DE PRODUTOS (saída / retorno)
+   ================================================================ */
+
+.grade-header {
+    display: grid;
+    grid-template-columns: 1fr 1fr 90px 48px;
+    gap: 8px;
+    padding: 8px 10px;
+    background: var(--primaria);
+    color: white;
+    border-radius: var(--raio) var(--raio) 0 0;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.grade-linha {
+    display: grid;
+    grid-template-columns: 1fr 1fr 90px 48px;
+    gap: 8px;
+    padding: 6px 8px;
+    border: 1px solid var(--cinza);
+    border-top: none;
+    background: white;
+    align-items: start;
+}
+.grade-linha:last-child { border-radius: 0 0 var(--raio) var(--raio); }
+.grade-linha:nth-child(even) { background: #fafbff; }
+
+.grade-cel-busca { position: relative; }
+.grade-cel-qtd input { text-align: center; }
+
+/* ── Autocomplete dropdown ─────────────────────────────── */
+.autocomplete-lista {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1.5px solid var(--acento);
+    border-top: none;
+    border-radius: 0 0 var(--raio) var(--raio);
+    z-index: 500;
+    max-height: 220px;
+    overflow-y: auto;
+    box-shadow: 0 4px 12px rgba(0,0,0,.15);
+}
+.ac-item {
+    padding: 10px 12px;
+    cursor: pointer;
+    font-size: 13px;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background .1s;
+}
+.ac-item:hover    { background: #eef4ff; }
+.ac-item:last-child { border-bottom: none; }
+.ac-vazio { color: var(--cinza-texto); font-style: italic; cursor: default; }
+.ac-vazio:hover   { background: transparent; }
+
+/* ── Layout QR Code ────────────────────────────────────── */
+.qr-layout {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 24px;
+    align-items: start;
+}
+.qr-resumo { flex: 1; }
+.qr-resumo p { margin-bottom: 6px; }
+
+.qr-codigo-area {
+    text-align: center;
+    min-width: 200px;
+}
+.qr-imagem {
+    display: block;
+    width: 240px;
+    height: 240px;
+    border: 3px solid var(--primaria);
+    border-radius: var(--raio);
+    margin: 0 auto 12px;
+}
+
+/* ── Status QR ─────────────────────────────────────────── */
+.status-qr {
+    padding: 10px 14px;
+    border-radius: var(--raio);
+    font-size: 14px;
+    font-weight: 600;
+    text-align: center;
+    margin-top: 8px;
+}
+.status-aguardando {
+    background: #fff3cd;
+    color: #856404;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+.status-confirmado { background: #d4edda; color: #155724; }
+.status-expirado   { background: #f8d7da; color: #721c24; }
+
+/* Spinner animado */
+.spinner {
+    display: inline-block;
+    width: 16px; height: 16px;
+    border: 3px solid #ffc107;
+    border-top-color: #856404;
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+    flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Responsivo para grade ─────────────────────────────── */
+@media (max-width: 700px) {
+    .grade-header,
+    .grade-linha {
+        grid-template-columns: 1fr 80px 44px;
+    }
+    .grade-header > div:nth-child(2),
+    .grade-cel-produto { display: none; } /* Esconde coluna "Produto" no mobile */
+
+    .qr-layout { grid-template-columns: 1fr; }
+    .qr-imagem { width: 200px; height: 200px; }
+}

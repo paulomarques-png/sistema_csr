@@ -65,3 +65,11 @@ function flash(string $chave): string {
 function setFlash(string $chave, string $mensagem): void {
     $_SESSION['flash'][$chave] = $mensagem;
 }
+
+// ── Gera a URL da imagem do QR Code (serviço externo, sem biblioteca) ─
+function gerarQRImageUrl(string $dados, int $tamanho = 280): string {
+    return 'https://api.qrserver.com/v1/create-qr-code/'
+         . '?size=' . $tamanho . 'x' . $tamanho
+         . '&data=' . urlencode($dados)
+         . '&format=png&margin=10';
+}
