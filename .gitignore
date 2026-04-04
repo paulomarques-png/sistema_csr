@@ -1,0 +1,10 @@
+/vendor/
+/node_modules/
+/.env
+
+# arquivos do XAMPP / sistema
+*.log
+*.tmp
+
+# config sensível
+config/conexao.php
