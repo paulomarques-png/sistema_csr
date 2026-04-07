@@ -21,11 +21,11 @@ $stmt = $pdo->prepare("
     SELECT codigo, descricao, unidade
     FROM produtos
     WHERE ativo = 1
-      AND (codigo LIKE :termo OR descricao LIKE :termo)
+      AND (codigo LIKE :termo1 OR descricao LIKE :termo2)
     ORDER BY descricao ASC
     LIMIT 10
 ");
-$stmt->execute([':termo' => "%$termo%"]);
+$stmt->execute([':termo1' => "%$termo%", ':termo2' => "%$termo%"]);
 
 header('Content-Type: application/json');
 echo json_encode($stmt->fetchAll());

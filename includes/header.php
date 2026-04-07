@@ -76,15 +76,15 @@ $paginaAtual = basename($_SERVER['PHP_SELF'], '.php');
     <?php endif; ?>
 
     <?php if (in_array($_SESSION['usuario_perfil'] ?? '', ['admin','supervisor','master'])): ?>
-    <a href="<?= BASE_URL ?>/pages/venda.php"
+    <a href="<?= BASE_URL ?>/pages/confirmar_venda.php"
        class="<?= $paginaAtual === 'venda' ? 'ativo' : '' ?>">
         ✅ Confirmar Venda
     </a>
     <?php endif; ?>
 
     <?php if (in_array($_SESSION['usuario_perfil'] ?? '', ['admin','supervisor','master'])): ?>
-    <a href="<?= BASE_URL ?>/pages/relatorio.php"
-       class="<?= $paginaAtual === 'relatorio' ? 'ativo' : '' ?>">
+    <a href="<?= BASE_URL ?>/pages/relatorios.php"
+       class="<?= $paginaAtual === 'relatorios' ? 'ativo' : '' ?>">
         📊 Relatórios
     </a>
     <?php endif; ?>

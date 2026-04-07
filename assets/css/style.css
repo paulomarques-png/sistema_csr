@@ -646,3 +646,18 @@ footer a:hover { opacity: 1; }
     .qr-layout { grid-template-columns: 1fr; }
     .qr-imagem { width: 200px; height: 200px; }
 }
+
+/* Status rejeitado */
+.status-rejeitado {
+    background: #f8d7da;
+    color: #721c24;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.status-rejeitado a {
+    color: #721c24;
+    font-weight: bold;
+}

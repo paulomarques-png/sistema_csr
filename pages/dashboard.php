@@ -15,39 +15,30 @@ $vendedores = $pdo->query("
 ")->fetchAll();
 
 // ── Monta o painel de resumo de HOJE por vendedor ────────────────
-// Para cada vendedor: soma saídas, retornos e vendas confirmadas do dia
 function resumoVendedor(PDO $pdo, int $vendedorId, string $data): array {
-    // Total de itens saídos hoje (confirmados ou não)
     $stmt = $pdo->prepare("
         SELECT COALESCE(SUM(quantidade), 0) AS total
-        FROM reg_saidas
-        WHERE vendedor_id = :vid AND data = :data
+        FROM reg_saidas WHERE vendedor_id = :vid AND data = :data
     ");
     $stmt->execute([':vid' => $vendedorId, ':data' => $data]);
     $saidas = (int) $stmt->fetchColumn();
 
-    // Total retornado hoje
     $stmt = $pdo->prepare("
         SELECT COALESCE(SUM(quantidade), 0) AS total
-        FROM reg_retornos
-        WHERE vendedor_id = :vid AND data = :data
+        FROM reg_retornos WHERE vendedor_id = :vid AND data = :data
     ");
     $stmt->execute([':vid' => $vendedorId, ':data' => $data]);
     $retornos = (int) $stmt->fetchColumn();
 
-    // Total de vendas confirmadas hoje
     $stmt = $pdo->prepare("
         SELECT COALESCE(SUM(quantidade), 0) AS total
-        FROM reg_vendas
-        WHERE vendedor_id = :vid AND data = :data
+        FROM reg_vendas WHERE vendedor_id = :vid AND data = :data
     ");
     $stmt->execute([':vid' => $vendedorId, ':data' => $data]);
     $vendas = (int) $stmt->fetchColumn();
 
-    // Saldo = saídas - retornos - vendas confirmadas
     $saldo = $saidas - $retornos - $vendas;
 
-    // Status baseado no saldo e movimento
     if ($saidas === 0 && $retornos === 0 && $vendas === 0) {
         $status = 'sem_movimento';
     } elseif ($saldo === 0) {
@@ -62,16 +53,15 @@ function resumoVendedor(PDO $pdo, int $vendedorId, string $data): array {
 }
 
 // ── Busca pendências de dias anteriores ──────────────────────────
-// Vendedores que têm saldo > 0 em datas anteriores a hoje
 function buscarPendencias(PDO $pdo, string $hoje): array {
     $stmt = $pdo->query("
         SELECT
             v.nome,
             s.data,
             (
-                COALESCE((SELECT SUM(q.quantidade) FROM reg_saidas   q WHERE q.vendedor_id = v.id AND q.data = s.data), 0) -
-                COALESCE((SELECT SUM(r.quantidade) FROM reg_retornos r WHERE r.vendedor_id = v.id AND r.data = s.data), 0) -
-                COALESCE((SELECT SUM(vd.quantidade)FROM reg_vendas   vd WHERE vd.vendedor_id = v.id AND vd.data = s.data), 0)
+                COALESCE((SELECT SUM(q.quantidade)  FROM reg_saidas   q  WHERE q.vendedor_id  = v.id AND q.data  = s.data), 0) -
+                COALESCE((SELECT SUM(r.quantidade)  FROM reg_retornos r  WHERE r.vendedor_id  = v.id AND r.data  = s.data), 0) -
+                COALESCE((SELECT SUM(vd.quantidade) FROM reg_vendas   vd WHERE vd.vendedor_id = v.id AND vd.data = s.data), 0)
             ) AS saldo
         FROM vendedores v
         INNER JOIN reg_saidas s ON s.vendedor_id = v.id
@@ -84,6 +74,24 @@ function buscarPendencias(PDO $pdo, string $hoje): array {
 }
 
 $pendencias = buscarPendencias($pdo, $hoje);
+
+// ── Busca QRs pendentes e rejeitados (qualquer data, não expirados) ─
+// Usa as colunas reais: usado=0 significa pendente, rejeitado=1 significa rejeitado
+$pendentesQR = $pdo->query("
+    SELECT
+        t.token,
+        t.tipo,
+        t.expira_em,
+        t.data_ref,
+        t.rejeitado,
+        t.rejeitado_motivo,
+        v.nome AS vendedor
+    FROM qr_tokens t
+    INNER JOIN vendedores v ON v.id = t.vendedor_id
+    WHERE t.usado = 0
+      AND t.expira_em > NOW()
+    ORDER BY t.rejeitado DESC, t.criado_em DESC
+")->fetchAll();
 
 // ── Monta resumo de todos os vendedores ──────────────────────────
 $resumos = [];
@@ -103,7 +111,7 @@ $statusVenda   = verificarHorario('venda');
 
 <main>
 
-    <?php /* ── Alerta de pendências ────────────────────────── */ ?>
+    <?php /* ── Alerta de pendências de dias anteriores ─────── */ ?>
     <?php if (!empty($pendencias)): ?>
     <div class="alerta alerta-aviso" style="display:flex; align-items:flex-start; gap:10px;">
         <span style="font-size:22px; line-height:1">⚠️</span>
@@ -179,7 +187,7 @@ $statusVenda   = verificarHorario('venda');
             <span class="btn-op-icone">✅</span>
             <span class="btn-op-label">Confirmar Venda</span>
         </a>
-        <a href="<?= BASE_URL ?>/pages/relatorio.php" class="btn-operacao btn-op-relatorio">
+        <a href="<?= BASE_URL ?>/pages/relatorios.php" class="btn-operacao btn-op-relatorio">
             <span class="btn-op-icone">📊</span>
             <span class="btn-op-label">Gerar Relatório</span>
         </a>
@@ -193,6 +201,68 @@ $statusVenda   = verificarHorario('venda');
         <?php endif; ?>
 
     </div>
+
+    <?php /* ── Painel de QRs pendentes / rejeitados ─────────── */ ?>
+    <?php if (!empty($pendentesQR)): ?>
+    <div class="card" style="border-left: 4px solid var(--amarelo)">
+        <div class="card-titulo">🔔 Confirmações Pendentes / Rejeitadas</div>
+        <div class="tabela-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Vendedor</th>
+                        <th style="text-align:center">Tipo</th>
+                        <th style="text-align:center">Data</th>
+                        <th style="text-align:center">Status</th>
+                        <th style="text-align:center">Expira em</th>
+                        <th style="text-align:center">Ação</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($pendentesQR as $pqr): ?>
+                <tr style="background: <?= $pqr['rejeitado'] ? '#fff5f5' : '#fffbea' ?>">
+                    <td><strong><?= esc($pqr['vendedor']) ?></strong></td>
+                    <td style="text-align:center">
+                        <?= $pqr['tipo'] === 'saida' ? '📤 Saída' : '📥 Retorno' ?>
+                    </td>
+                    <td style="text-align:center">
+                        <?= formatarData($pqr['data_ref']) ?>
+                    </td>
+                    <td style="text-align:center">
+                        <?php if ($pqr['rejeitado']): ?>
+                            <span class="badge badge-vermelho">❌ Rejeitado</span>
+                            <?php if ($pqr['rejeitado_motivo']): ?>
+                                <br><small style="color:#888; font-style:italic">
+                                    <?= esc($pqr['rejeitado_motivo']) ?>
+                                </small>
+                            <?php endif; ?>
+                        <?php else: ?>
+                            <span class="badge badge-amarelo">⏳ Aguardando</span>
+                        <?php endif; ?>
+                    </td>
+                    <td style="text-align:center; font-size:13px; color:var(--cinza-texto)">
+                        <?= formatarDataHora($pqr['expira_em']) ?>
+                    </td>
+                    <td style="text-align:center; white-space:nowrap">
+                        <?php if ($pqr['rejeitado']): ?>
+                            <a href="<?= BASE_URL ?>/pages/<?= $pqr['tipo'] ?>.php?etapa=corrigir&token=<?= esc($pqr['token']) ?>"
+                               class="btn btn-vermelho" style="padding:4px 12px; font-size:13px; text-decoration:none">
+                                ✏️ Corrigir
+                            </a>
+                        <?php else: ?>
+                            <a href="<?= BASE_URL ?>/pages/<?= $pqr['tipo'] ?>.php?etapa=reenviar&vid=<?= $pqr['vendedor_id'] ?? '' ?>&data=<?= $pqr['data_ref'] ?>"
+                               class="btn btn-acento" style="padding:4px 12px; font-size:13px; text-decoration:none">
+                                📲 Reenviar QR
+                            </a>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <?php /* ── Painel de resumo por vendedor ─────────────────── */ ?>
     <div class="card">
@@ -226,16 +296,13 @@ $statusVenda   = verificarHorario('venda');
                 </thead>
                 <tbody>
                     <?php foreach ($resumos as $r):
-                        // Define classe da linha conforme status
                         $classeLinha = match($r['status']) {
-                            'zerado'       => 'linha-zero',
-                            'aberto'       => 'linha-aberto',
-                            'negativo'     => 'linha-negativo',
-                            'sem_movimento'=> '',
-                            default        => '',
+                            'zerado'        => 'linha-zero',
+                            'aberto'        => 'linha-aberto',
+                            'negativo'      => 'linha-negativo',
+                            'sem_movimento' => '',
+                            default         => '',
                         };
-
-                        // Badge de status
                         [$badgeClasse, $badgeTexto] = match($r['status']) {
                             'zerado'        => ['badge-verde',    '✔ Zerado'],
                             'aberto'        => ['badge-amarelo',  '⏳ Em aberto'],
@@ -250,9 +317,7 @@ $statusVenda   = verificarHorario('venda');
                         <td style="text-align:center"><?= $r['retornos'] ?></td>
                         <td style="text-align:center"><?= $r['vendas'] ?></td>
                         <td style="text-align:center">
-                            <span class="<?= classSaldo($r['saldo']) ?>">
-                                <?= $r['saldo'] ?>
-                            </span>
+                            <span class="<?= classSaldo($r['saldo']) ?>"><?= $r['saldo'] ?></span>
                         </td>
                         <td style="text-align:center">
                             <span class="badge <?= $badgeClasse ?>"><?= $badgeTexto ?></span>
@@ -261,7 +326,6 @@ $statusVenda   = verificarHorario('venda');
                     <?php endforeach; ?>
                 </tbody>
 
-                <?php /* ── Linha de totais gerais ───────── */ ?>
                 <?php
                     $totalSaidas   = array_sum(array_column($resumos, 'saidas'));
                     $totalRetornos = array_sum(array_column($resumos, 'retornos'));
@@ -283,7 +347,6 @@ $statusVenda   = verificarHorario('venda');
             </table>
         </div>
 
-        <?php /* ── Legenda de cores ──────────────────────── */ ?>
         <div class="legenda-cores">
             <span class="legenda-item">
                 <span class="legenda-bolinha" style="background:#d4edda"></span> Zerado
@@ -315,7 +378,6 @@ $statusVenda   = verificarHorario('venda');
 </footer>
 
 <script src="<?= BASE_URL ?>/assets/js/main.js"></script>
-
 <script>
 // Atualiza o painel automaticamente a cada 60 segundos
 setTimeout(function() { location.reload(); }, 60000);
