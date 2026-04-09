@@ -661,3 +661,170 @@ footer a:hover { opacity: 1; }
     color: #721c24;
     font-weight: bold;
 }
+
+.page-top {
+    background: linear-gradient(135deg, var(--primaria) 0%, #1a1a6e 100%);
+    color: white;
+    padding: 22px 28px 18px;
+}
+.page-top h2 {
+    font-size: 1.35rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+}
+.page-top p {
+    font-size: .84rem;
+    opacity: .72;
+    margin-top: 5px;
+}
+
+/* ================================================================
+   AUDITORIA (pages/auditoria.php)
+   ================================================================ */
+
+/* ── Formulário de filtros ───────────────────────────────────── */
+.audit-filtros {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr auto;
+    gap: 12px;
+    align-items: end;
+}
+.audit-filtros .grupo-campo { margin-bottom: 0; }
+.audit-filtros-btns {
+    display: flex;
+    gap: 8px;
+    padding-bottom: 1px;
+}
+
+@media (max-width: 900px) {
+    .audit-filtros {
+        grid-template-columns: 1fr 1fr;
+    }
+    .audit-filtros-btns {
+        grid-column: 1 / -1;
+    }
+}
+@media (max-width: 500px) {
+    .audit-filtros { grid-template-columns: 1fr; }
+}
+
+/* ── Cards de estatísticas ──────────────────────────────────── */
+.audit-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 20px;
+}
+.audit-stat-card {
+    background: var(--branco);
+    border-radius: var(--raio);
+    box-shadow: var(--sombra);
+    padding: 18px 20px;
+    border-left: 4px solid var(--acento);
+}
+.audit-stat-card.audit-stat-critica {
+    border-left-color: var(--vermelho);
+}
+.audit-stat-card.audit-stat-top {
+    border-left-color: var(--verde);
+}
+.audit-stat-num {
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: var(--primaria);
+    line-height: 1.2;
+    word-break: break-word;
+}
+.audit-stat-critica .audit-stat-num { color: var(--vermelho); }
+.audit-stat-top     .audit-stat-num { color: var(--verde); font-size: 1rem; }
+.audit-stat-label {
+    font-size: 12px;
+    color: var(--cinza-texto);
+    margin-top: 4px;
+}
+
+@media (max-width: 800px) {
+    .audit-stats { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 460px) {
+    .audit-stats { grid-template-columns: 1fr; }
+}
+
+/* ── Gráfico de barras horizontais ──────────────────────────── */
+.audit-barras { display: flex; flex-direction: column; gap: 10px; }
+
+.audit-barra-row {
+    display: grid;
+    grid-template-columns: 200px 1fr 50px;
+    gap: 10px;
+    align-items: center;
+}
+.audit-barra-label { display: flex; align-items: center; }
+.audit-barra-track {
+    background: var(--cinza-claro);
+    border-radius: 4px;
+    height: 18px;
+    overflow: hidden;
+}
+.audit-barra-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width .5s ease;
+    min-width: 4px;
+}
+.audit-barra-normal  { background: var(--acento); }
+.audit-barra-critica { background: var(--vermelho); }
+.audit-barra-aviso   { background: var(--amarelo); }
+.audit-barra-qtd {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--cinza-texto);
+    text-align: right;
+}
+
+@media (max-width: 600px) {
+    .audit-barra-row { grid-template-columns: 140px 1fr 40px; }
+}
+
+/* ── Badges de ação ─────────────────────────────────────────── */
+.audit-badge-normal  { background: #dbeafe; color: #1e40af; }
+.audit-badge-critica { background: #f8d7da; color: #721c24; }
+.audit-badge-aviso   { background: #fff3cd; color: #856404; }
+
+/* ── Highlight de linhas da tabela ──────────────────────────── */
+tr.audit-linha-critica td { background: #fff5f5; }
+tr.audit-linha-critica:hover td { background: #ffe4e6; }
+
+tr.audit-linha-aviso td { background: #fffbea; }
+tr.audit-linha-aviso:hover td { background: #fef3c7; }
+
+/* ── Paginação ──────────────────────────────────────────────── */
+.audit-paginacao {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 20px;
+    flex-wrap: wrap;
+}
+.audit-pag-info {
+    font-size: 13px;
+    color: var(--cinza-texto);
+    padding: 0 8px;
+}
+
+/* ── Legenda ────────────────────────────────────────────────── */
+.audit-legenda {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--cinza-claro);
+    font-size: 12px;
+    color: var(--cinza-texto);
+    align-items: center;
+}

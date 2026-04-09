@@ -12,6 +12,9 @@ $paginaAtual = basename($_SERVER['PHP_SELF'], '.php');
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= SISTEMA_NOME ?></title>
     <link rel="stylesheet" href="<?= BASE_URL ?>/assets/css/style.css">
+    <?php if (!empty($cssExtra)): ?>
+    <link rel="stylesheet" href="<?= BASE_URL ?>/assets/css/<?= $cssExtra ?>.css">
+    <?php endif; ?>
 </head>
 <body>
 

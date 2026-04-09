@@ -253,6 +253,11 @@ if ($etapa === 'qr') {
 ?>
 <?php include __DIR__ . '/../includes/header.php'; ?>
 
+<div class="page-top">
+    <h2>📤 Registrar Saída</h2>
+    <p>Registro de carga saindo para o vendedor com geração de QR Code</p>
+</div>
+
 <main>
 
 <?php /* ── TELA BLOQUEADA ──────────────────────────────────── */ ?>

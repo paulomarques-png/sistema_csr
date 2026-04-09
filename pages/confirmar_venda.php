@@ -192,6 +192,11 @@ $bloqueado = ($statusHorario === 'bloqueado'
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
+<div class="page-top">
+    <h2>✅ Confirmar Venda</h2>
+    <p>Lançamento de pedidos de venda e fechamento diário por vendedor</p>
+</div>
+
 <main>
 
 <div class="page-header">

@@ -249,6 +249,11 @@ if ($etapa === 'qr') {
 ?>
 <?php include __DIR__ . '/../includes/header.php'; ?>
 
+<div class="page-top">
+    <h2>📥 Registrar Retorno</h2>
+    <p>Registro de mercadoria devolvida pelo vendedor</p>
+</div>
+
 <main>
 
 <?php /* ── TELA BLOQUEADA ──────────────────────────────────── */ ?>
