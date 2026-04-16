@@ -29,27 +29,26 @@ $paginaAtual = basename($_SERVER['PHP_SELF'], '.php');
 <?php endif; ?>
 
 <header class="site-header">
+    <?php
+    $logoPath = __DIR__ . '/../assets/img/logo.png';
+    $logoUrl  = BASE_URL . '/assets/img/logo.png';
+    ?>
     <div class="header-logo">
-        <?php
-        $logoPath = __DIR__ . '/../assets/img/logo.png';
-        $logoUrl  = BASE_URL . '/assets/img/logo.png';
-        ?>
         <?php if (file_exists($logoPath)): ?>
-            <img src="<?= $logoUrl ?>"
-                 alt="Logo"
-                 class="logo-img"
-                 onclick="abrirTrocarLogo()"
-                 title="Clique para alterar a logo">
+            <img src="<?= $logoUrl ?>" alt="Logo" class="logo-img"
+                onclick="abrirTrocarLogo()" title="Clique para alterar a logo">
         <?php else: ?>
             <span class="logo-texto" onclick="abrirTrocarLogo()" title="Clique para adicionar logo">
-                📦 <?= SISTEMA_NOME ?>
+              📦  <?= SISTEMA_NOME ?>
             </span>
         <?php endif; ?>
     </div>
 
-    <div class="header-titulo">
-        <h1><?= SISTEMA_NOME ?></h1>
+    <?php if (file_exists($logoPath)): ?>
+    <div class="logo-texto">
+        <h1>📦  <?= SISTEMA_NOME ?></h1>
     </div>
+    <?php endif; ?>
 
     <div class="header-info">
         <div class="relogio" id="relogio">--:--:--</div>

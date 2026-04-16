@@ -73,3 +73,45 @@ function gerarQRImageUrl(string $dados, int $tamanho = 280): string {
          . '&data=' . urlencode($dados)
          . '&format=png&margin=10';
 }
+
+// ── Retorna IP real do cliente ───────────────────────────────────
+function obterIP(): string {
+    $ip = $_SERVER['HTTP_X_FORWARDED_FOR']
+       ?? $_SERVER['HTTP_CLIENT_IP']
+       ?? $_SERVER['REMOTE_ADDR']
+       ?? '0.0.0.0';
+    // X_FORWARDED_FOR pode conter múltiplos IPs — pega o primeiro
+    return trim(explode(',', $ip)[0]);
+}
+
+// ── Verifica se o modo manutenção está ativo ─────────────────────
+function modoManutencaoAtivo(): bool {
+    $arquivo = __DIR__ . '/../config/manutencao.json';
+    if (!file_exists($arquivo)) return false;
+    $dados = json_decode(file_get_contents($arquivo), true);
+    if (empty($dados['ativo'])) return false;
+    // Verifica se o timeout expirou
+    if ((time() - ($dados['ativado_em'] ?? 0)) > MANUTENCAO_TIMEOUT) {
+        file_put_contents($arquivo, json_encode(['ativo' => false]));
+        return false;
+    }
+    return true;
+}
+
+// ── Registra uma ação no log do sistema ─────────────────────────
+function registrarLog(string $tipo, string $descricao, string $ip): void {
+    try {
+        $pdo  = conectar();
+        $stmt = $pdo->prepare(
+            "INSERT INTO log_sistema (tipo, descricao, ip)
+             VALUES (:tipo, :descricao, :ip)"
+        );
+        $stmt->execute([
+            ':tipo'      => $tipo,
+            ':descricao' => $descricao,
+            ':ip'        => $ip,
+        ]);
+    } catch (Exception $e) {
+        error_log("Erro ao registrar log: " . $e->getMessage());
+    }
+}

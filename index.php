@@ -4,15 +4,14 @@ require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 
+// Processa o logout
+if (isset($_GET['logout'])) {
+    encerrarSessao('Você saiu do sistema.');
+}
 // Se já estiver logado, redireciona para o dashboard
 if (isset($_SESSION['usuario_id'])) {
     header('Location: ' . BASE_URL . '/pages/dashboard.php');
     exit;
-}
-
-// Processa o logout
-if (isset($_GET['logout'])) {
-    encerrarSessao('Você saiu do sistema.');
 }
 
 $erro    = '';

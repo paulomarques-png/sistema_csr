@@ -1,25 +1,38 @@
 <?php
+// ============================================================
+// pages/confirmar_venda.php — Confirmação de Vendas
+// Salvar em: C:\xampp\htdocs\sistema_csr\pages\confirmar_venda.php
+// ============================================================
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 
-verificarPerfil(['administrativo', 'supervisor', 'master']);
+verificarPerfil(['admin', 'supervisor', 'master']);
 
 $pdo  = conectar();
 $erro = '';
 $msg  = '';
 
+// ── Horário — definido ANTES do processamento ────────────────────
+$statusHorario = verificarHorario('venda');
+$bloqueado = ($statusHorario === 'bloqueado'
+    && !in_array($_SESSION['usuario_perfil'], ['supervisor', 'master']));
+
 // ── Parâmetros de filtro ─────────────────────────────────────────
-$vendedorId  = (int)($_GET['vendedor_id'] ?? $_POST['vendedor_id'] ?? 0);
-$dataFiltro  = $_GET['data'] ?? $_POST['data'] ?? date('Y-m-d');
+$vendedorId = (int)($_GET['vendedor_id'] ?? $_POST['vendedor_id'] ?? 0);
+$dataFiltro = $_GET['data'] ?? $_POST['data'] ?? date('Y-m-d');
 
 // ── Lista de vendedores para o select ───────────────────────────
-$vendedores = $pdo->query("SELECT id, nome FROM vendedores WHERE ativo = 1 ORDER BY nome ASC")->fetchAll();
+$vendedores = $pdo->query(
+    "SELECT id, nome FROM vendedores WHERE ativo = 1 ORDER BY nome ASC"
+)->fetchAll();
 
 // ── PROCESSAMENTO: Adicionar pedido ─────────────────────────────
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['acao']) && $_POST['acao'] === 'add_pedido') {
-
+if (!$bloqueado
+    && $_SERVER['REQUEST_METHOD'] === 'POST'
+    && ($_POST['acao'] ?? '') === 'add_pedido'
+) {
     $vendedorId  = (int)($_POST['vendedor_id'] ?? 0);
     $dataFiltro  = $_POST['data']   ?? date('Y-m-d');
     $pedidoNum   = trim($_POST['pedido'] ?? '');
@@ -33,7 +46,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['acao']) && $_POST['ac
     } elseif (empty($pedidoNum)) {
         $erro = 'Informe o número do pedido de venda.';
     } else {
-        // Monta itens válidos
         $itens = [];
         for ($i = 0; $i < count($codigos); $i++) {
             $cod = trim($codigos[$i]     ?? '');
@@ -43,11 +55,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['acao']) && $_POST['ac
                 $itens[] = ['codigo' => $cod, 'produto' => $prd, 'quantidade' => $qty];
             }
         }
-
         if (empty($itens)) {
             $erro = 'Adicione pelo menos um produto com quantidade válida.';
         } else {
-            // Verifica se pedido já foi lançado para esse vendedor+data
             $stmtChk = $pdo->prepare("
                 SELECT COUNT(*) FROM reg_vendas
                 WHERE vendedor_id = :vid AND data = :data AND pedido = :pedido
@@ -60,15 +70,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['acao']) && $_POST['ac
     }
 
     if (empty($erro) && !empty($itens)) {
-        // Busca nome do vendedor
         $stmtV = $pdo->prepare("SELECT nome FROM vendedores WHERE id = :id");
         $stmtV->execute([':id' => $vendedorId]);
         $nomeVend = $stmtV->fetchColumn();
 
-        $agora = date('H:i:s');
+        $agora   = date('H:i:s');
         $stmtIns = $pdo->prepare("
-            INSERT INTO reg_vendas (data, hora, vendedor_id, vendedor, codigo, produto, quantidade, pedido, obs)
-            VALUES (:data, :hora, :vid, :vendedor, :codigo, :produto, :quantidade, :pedido, :obs)
+            INSERT INTO reg_vendas
+                (data, hora, vendedor_id, vendedor, codigo, produto, quantidade, pedido, obs)
+            VALUES
+                (:data, :hora, :vid, :vendedor, :codigo, :produto, :quantidade, :pedido, :obs)
         ");
         foreach ($itens as $item) {
             $stmtIns->execute([
@@ -91,17 +102,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['acao']) && $_POST['ac
 }
 
 // ── PROCESSAMENTO: Excluir pedido ───────────────────────────────
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['acao']) && $_POST['acao'] === 'del_pedido') {
+if (!$bloqueado
+    && $_SERVER['REQUEST_METHOD'] === 'POST'
+    && ($_POST['acao'] ?? '') === 'del_pedido'
+) {
     $pedidoDel  = trim($_POST['pedido_del'] ?? '');
     $vendedorId = (int)($_POST['vendedor_id'] ?? 0);
     $dataFiltro = $_POST['data'] ?? date('Y-m-d');
 
     if ($pedidoDel && $vendedorId > 0) {
         $stmtDel = $pdo->prepare("
-            DELETE FROM reg_vendas WHERE vendedor_id = :vid AND data = :data AND pedido = :pedido
+            DELETE FROM reg_vendas
+            WHERE vendedor_id = :vid AND data = :data AND pedido = :pedido
         ");
         $stmtDel->execute([':vid' => $vendedorId, ':data' => $dataFiltro, ':pedido' => $pedidoDel]);
-        registrarLog('VENDA_EXCLUIDA', "Pedido: $pedidoDel | Vendedor ID: $vendedorId | Data: $dataFiltro", obterIP());
+        registrarLog('VENDA_EXCLUIDA',
+            "Pedido: $pedidoDel | Vendedor ID: $vendedorId | Data: $dataFiltro",
+            obterIP());
         $msg = "Pedido \"$pedidoDel\" removido.";
     }
 }
@@ -127,14 +144,13 @@ if ($vendedorId > 0) {
     $stmtS->execute([':vid' => $vendedorId, ':data' => $dataFiltro]);
     foreach ($stmtS->fetchAll() as $row) {
         $resumoSaidas[$row['codigo']] = [
-            'produto'  => $row['produto'],
-            'saida'    => (int)$row['total'],
-            'retorno'  => 0,
-            'vendido'  => 0,
+            'produto' => $row['produto'],
+            'saida'   => (int)$row['total'],
+            'retorno' => 0,
+            'vendido' => 0,
         ];
     }
 
-    // ── Resumo: Retornos confirmados ─────────────────────────────
     $stmtR = $pdo->prepare("
         SELECT codigo, SUM(quantidade) AS total
         FROM reg_retornos
@@ -148,7 +164,6 @@ if ($vendedorId > 0) {
         }
     }
 
-    // ── Resumo: Vendas já lançadas ────────────────────────────────
     $stmtVnd = $pdo->prepare("
         SELECT codigo, SUM(quantidade) AS total
         FROM reg_vendas
@@ -163,7 +178,7 @@ if ($vendedorId > 0) {
     }
 }
 
-// ── Pedidos já lançados (agrupados por número de pedido) ─────────
+// ── Pedidos já lançados ──────────────────────────────────────────
 $pedidosLancados = [];
 if ($vendedorId > 0) {
     $stmtPed = $pdo->prepare("
@@ -183,14 +198,8 @@ $totalSaida   = array_sum(array_column($resumoSaidas, 'saida'));
 $totalRetorno = array_sum(array_column($resumoSaidas, 'retorno'));
 $totalVendido = array_sum(array_column($resumoSaidas, 'vendido'));
 $totalSaldo   = $totalSaida - $totalRetorno - $totalVendido;
-
-// ── Horário de acesso ─────────────────────────────────────────────
-$statusHorario = verificarHorario('confirmar_venda');
-$bloqueado = ($statusHorario === 'bloqueado'
-    && !in_array($_SESSION['usuario_perfil'], ['supervisor', 'master']));
-
-require_once __DIR__ . '/../includes/header.php';
 ?>
+<?php include __DIR__ . '/../includes/header.php'; ?>
 
 <div class="page-top">
     <h2>✅ Confirmar Venda</h2>
@@ -199,236 +208,246 @@ require_once __DIR__ . '/../includes/header.php';
 
 <main>
 
-<div class="page-header">
-    <h2>✅ Confirmar Venda</h2>
-    <p class="page-sub">Lançamento de pedidos de venda e fechamento diário por vendedor</p>
-</div>
-
-<?php if ($msg): ?>
-    <div class="alerta alerta-sucesso"><?= esc($msg) ?></div>
-<?php endif; ?>
-<?php if ($erro): ?>
-    <div class="alerta alerta-erro"><?= esc($erro) ?></div>
-<?php endif; ?>
+<?php /* ── TELA BLOQUEADA ──────────────────────────────────── */ ?>
 <?php if ($bloqueado): ?>
-    <div class="alerta alerta-aviso">⏰ Confirmação de vendas fora do horário permitido.</div>
-<?php endif; ?>
-
-<!-- ── Filtro ──────────────────────────────────────────────────── -->
-<div class="card" style="margin-bottom:20px">
-    <form method="get" action="" style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end">
-        <div class="grupo-campo" style="flex:1; min-width:200px">
-            <label>Vendedor</label>
-            <select name="vendedor_id" class="campo" required onchange="this.form.submit()">
-                <option value="">— Selecione —</option>
-                <?php foreach ($vendedores as $v): ?>
-                    <option value="<?= $v['id'] ?>"
-                        <?= $v['id'] == $vendedorId ? 'selected' : '' ?>>
-                        <?= esc($v['nome']) ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
+    <div class="card">
+        <div class="alerta alerta-erro" style="font-size:16px; text-align:center; padding:24px">
+            🚫 <strong>Confirmação de venda bloqueada</strong><br>
+            Permitido das <?= HORA_VENDA_INICIO ?> às <?= HORA_VENDA_FIM ?><br>
+            <small style="opacity:.8">Solicite autorização de um supervisor.</small>
         </div>
-        <div class="grupo-campo" style="min-width:160px">
-            <label>Data</label>
-            <input type="date" name="data" class="campo"
-                   value="<?= esc($dataFiltro) ?>" onchange="this.form.submit()">
-        </div>
-        <button type="submit" class="btn btn-secundario">🔍 Filtrar</button>
-    </form>
-</div>
-
-<?php if ($vendedorId > 0): ?>
-
-<!-- ── Painel de resumo ────────────────────────────────────────── -->
-<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:20px">
-    <div class="card-stat" style="border-left:4px solid #0A7BC4">
-        <div class="stat-num" style="color:#0A7BC4"><?= $totalSaida ?></div>
-        <div class="stat-label">📤 Saídas</div>
-    </div>
-    <div class="card-stat" style="border-left:4px solid #6f42c1">
-        <div class="stat-num" style="color:#6f42c1"><?= $totalRetorno ?></div>
-        <div class="stat-label">📥 Retornos</div>
-    </div>
-    <div class="card-stat" style="border-left:4px solid #28A745">
-        <div class="stat-num" style="color:#28A745"><?= $totalVendido ?></div>
-        <div class="stat-label">✅ Vendidos</div>
-    </div>
-    <div class="card-stat" style="border-left:4px solid <?= $totalSaldo == 0 ? '#28A745' : ($totalSaldo > 0 ? '#DC3545' : '#FFC107') ?>">
-        <div class="stat-num" style="color:<?= $totalSaldo == 0 ? '#28A745' : ($totalSaldo > 0 ? '#DC3545' : '#FFC107') ?>">
-            <?= $totalSaldo ?>
-        </div>
-        <div class="stat-label">
-            <?= $totalSaldo == 0 ? '🟢 Saldo zerado' : ($totalSaldo > 0 ? '🔴 Pendente' : '🟡 Verificar') ?>
+        <div style="text-align:center; margin-top:16px">
+            <a href="<?= BASE_URL ?>/index.php" class="btn btn-secundario">← Voltar</a>
         </div>
     </div>
-</div>
 
-<!-- ── Tabela de saldo por produto ────────────────────────────── -->
-<?php if (!empty($resumoSaidas)): ?>
-<div class="card" style="margin-bottom:20px">
-    <h3 style="margin-bottom:12px; color:var(--primaria)">
-        📊 Saldo por produto — <?= esc($nomeVendedorSel) ?> — <?= formatarData($dataFiltro) ?>
-    </h3>
-    <div style="overflow-x:auto">
-    <table class="tabela">
-        <thead>
-            <tr>
-                <th>Código</th>
-                <th>Produto</th>
-                <th style="text-align:center">Saída</th>
-                <th style="text-align:center">Retorno</th>
-                <th style="text-align:center">Vendido</th>
-                <th style="text-align:center">Saldo</th>
-                <th style="text-align:center">Status</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php foreach ($resumoSaidas as $cod => $r):
-                $saldo = $r['saida'] - $r['retorno'] - $r['vendido'];
-            ?>
-            <tr>
-                <td><small style="color:#888"><?= esc($cod) ?></small></td>
-                <td><?= esc($r['produto']) ?></td>
-                <td style="text-align:center"><?= $r['saida'] ?></td>
-                <td style="text-align:center"><?= $r['retorno'] ?></td>
-                <td style="text-align:center"><?= $r['vendido'] ?></td>
-                <td style="text-align:center; font-weight:bold;
-                    color:<?= $saldo == 0 ? '#28A745' : ($saldo > 0 ? '#DC3545' : '#FFC107') ?>">
-                    <?= $saldo ?>
-                </td>
-                <td style="text-align:center">
-                    <?php if ($saldo == 0): ?>
-                        <span class="badge badge-verde">✅ OK</span>
-                    <?php elseif ($saldo > 0): ?>
-                        <span class="badge badge-vermelho">⚠️ Pendente</span>
-                    <?php else: ?>
-                        <span class="badge badge-amarelo">🔍 Verificar</span>
-                    <?php endif; ?>
-                </td>
-            </tr>
-            <?php endforeach; ?>
-        </tbody>
-        <tfoot>
-            <tr style="font-weight:bold; background:#f4f6fa">
-                <td colspan="2">TOTAL GERAL</td>
-                <td style="text-align:center"><?= $totalSaida ?></td>
-                <td style="text-align:center"><?= $totalRetorno ?></td>
-                <td style="text-align:center"><?= $totalVendido ?></td>
-                <td style="text-align:center; color:<?= $totalSaldo == 0 ? '#28A745' : ($totalSaldo > 0 ? '#DC3545' : '#FFC107') ?>">
-                    <?= $totalSaldo ?>
-                </td>
-                <td></td>
-            </tr>
-        </tfoot>
-    </table>
-    </div>
-</div>
-<?php elseif($vendedorId > 0): ?>
-    <div class="alerta alerta-aviso" style="margin-bottom:20px">
-        ⚠️ Nenhuma saída confirmada encontrada para este vendedor nesta data.
-    </div>
-<?php endif; ?>
+<?php /* ── CONTEÚDO NORMAL ──────────────────────────────────── */ ?>
+<?php else: ?>
 
-<!-- ── Pedidos já lançados ─────────────────────────────────────── -->
-<?php if (!empty($pedidosLancados)): ?>
-<div class="card" style="margin-bottom:20px">
-    <h3 style="margin-bottom:12px; color:var(--primaria)">📋 Pedidos lançados</h3>
-    <table class="tabela">
-        <thead>
-            <tr>
-                <th>Pedido</th>
-                <th>Itens</th>
-                <th>Total (unid.)</th>
-                <th style="text-align:center">Ação</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php foreach ($pedidosLancados as $ped): ?>
-            <tr>
-                <td><strong><?= esc($ped['pedido']) ?></strong></td>
-                <td style="font-size:13px; color:#555; max-width:400px">
-                    <?= esc($ped['descricao']) ?>
-                </td>
-                <td style="text-align:center"><?= $ped['total_itens'] ?></td>
-                <td style="text-align:center">
-                    <?php if (!$bloqueado): ?>
-                    <form method="post" action=""
-                          onsubmit="return confirm('Excluir o pedido \'<?= esc($ped['pedido']) ?>\'?')">
-                        <input type="hidden" name="acao"       value="del_pedido">
-                        <input type="hidden" name="vendedor_id" value="<?= $vendedorId ?>">
-                        <input type="hidden" name="data"       value="<?= $dataFiltro ?>">
-                        <input type="hidden" name="pedido_del" value="<?= esc($ped['pedido']) ?>">
-                        <button type="submit" class="btn btn-vermelho" style="padding:6px 14px; font-size:13px">
-                            🗑 Excluir
-                        </button>
-                    </form>
-                    <?php else: ?>
-                        <span style="color:#aaa; font-size:12px">—</span>
-                    <?php endif; ?>
-                </td>
-            </tr>
-            <?php endforeach; ?>
-        </tbody>
-    </table>
-</div>
-<?php endif; ?>
+    <?php if ($msg): ?>
+        <div class="alerta alerta-sucesso">✅ <?= esc($msg) ?></div>
+    <?php endif; ?>
+    <?php if ($erro): ?>
+        <div class="alerta alerta-erro">❌ <?= esc($erro) ?></div>
+    <?php endif; ?>
+    <?php if ($statusHorario === 'manutencao'): ?>
+        <div class="alerta alerta-aviso">⚙️ Operando em modo manutenção — restrições de horário ignoradas.</div>
+    <?php elseif (in_array($_SESSION['usuario_perfil'], ['supervisor','master']) && $statusHorario === 'bloqueado'): ?>
+        <div class="alerta alerta-aviso">⚠️ Fora do horário padrão (<?= HORA_VENDA_INICIO ?>–<?= HORA_VENDA_FIM ?>). Liberado pelo perfil <?= esc($_SESSION['usuario_perfil']) ?>.</div>
+    <?php endif; ?>
 
-<!-- ── Formulário: adicionar pedido ───────────────────────────── -->
-<?php if (!$bloqueado): ?>
-<div class="card">
-    <h3 style="margin-bottom:4px; color:var(--primaria)">➕ Lançar pedido de venda</h3>
-    <p style="color:#666; font-size:13px; margin-bottom:16px">
-        Vendedor: <strong><?= esc($nomeVendedorSel) ?></strong>
-        — Data: <strong><?= formatarData($dataFiltro) ?></strong>
-    </p>
-
-    <form method="post" action="" id="form-venda">
-        <input type="hidden" name="acao"       value="add_pedido">
-        <input type="hidden" name="vendedor_id" value="<?= $vendedorId ?>">
-        <input type="hidden" name="data"        value="<?= $dataFiltro ?>">
-
-        <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px">
+    <!-- ── Filtro ───────────────────────────────────────────────── -->
+    <div class="card">
+        <form method="get" style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end">
             <div class="grupo-campo" style="flex:1; min-width:200px">
-                <label>Número do Pedido <span style="color:red">*</span></label>
-                <input type="text" name="pedido" class="campo"
-                       placeholder="Ex: PV-001, NF-1234, 00123..."
-                       maxlength="100" required autocomplete="off"
-                       value="<?= isset($_POST['pedido']) && $erro ? esc($_POST['pedido']) : '' ?>">
+                <label>Vendedor</label>
+                <select name="vendedor_id" class="campo" required onchange="this.form.submit()">
+                    <option value="">— Selecione —</option>
+                    <?php foreach ($vendedores as $v): ?>
+                        <option value="<?= $v['id'] ?>"
+                            <?= $v['id'] == $vendedorId ? 'selected' : '' ?>>
+                            <?= esc($v['nome']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
             </div>
-            <div class="grupo-campo" style="flex:1; min-width:200px">
-                <label>Observação <small style="font-weight:normal">(opcional)</small></label>
-                <input type="text" name="obs" class="campo"
-                       placeholder="Ex: Entrega parcial, cliente X..."
-                       maxlength="200">
+            <div class="grupo-campo" style="min-width:160px">
+                <label>Data</label>
+                <input type="date" name="data" class="campo"
+                       value="<?= esc($dataFiltro) ?>" onchange="this.form.submit()">
             </div>
+            <button type="submit" class="btn btn-secundario">🔍 Filtrar</button>
+        </form>
+    </div>
+
+    <?php if ($vendedorId > 0): ?>
+
+    <!-- ── Painel de resumo ─────────────────────────────────────── -->
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:20px">
+        <div class="card-stat" style="border-left:4px solid var(--acento)">
+            <div class="stat-num" style="color:var(--acento)"><?= $totalSaida ?></div>
+            <div class="stat-label">📤 Saídas</div>
         </div>
-
-        <!-- Grade de produtos -->
-        <div class="grade-header">
-            <div>Buscar produto</div>
-            <div>Produto selecionado</div>
-            <div style="text-align:center">Qtd</div>
-            <div></div>
+        <div class="card-stat" style="border-left:4px solid #6f42c1">
+            <div class="stat-num" style="color:#6f42c1"><?= $totalRetorno ?></div>
+            <div class="stat-label">📥 Retornos</div>
         </div>
-        <div id="grade-produtos"></div>
+        <div class="card-stat" style="border-left:4px solid var(--verde)">
+            <div class="stat-num" style="color:var(--verde)"><?= $totalVendido ?></div>
+            <div class="stat-label">✅ Vendidos</div>
+        </div>
+        <?php
+            $corSaldo = $totalSaldo == 0 ? 'var(--verde)' : ($totalSaldo > 0 ? 'var(--vermelho)' : 'var(--amarelo)');
+            $labelSaldo = $totalSaldo == 0 ? '🟢 Saldo zerado' : ($totalSaldo > 0 ? '🔴 Pendente' : '🟡 Verificar');
+        ?>
+        <div class="card-stat" style="border-left:4px solid <?= $corSaldo ?>">
+            <div class="stat-num" style="color:<?= $corSaldo ?>"><?= $totalSaldo ?></div>
+            <div class="stat-label"><?= $labelSaldo ?></div>
+        </div>
+    </div>
 
-        <button type="button" onclick="adicionarLinha()" class="btn btn-secundario" style="margin-top:10px">
-            + Adicionar Produto
-        </button>
+    <!-- ── Tabela de saldo por produto ─────────────────────────── -->
+    <?php if (!empty($resumoSaidas)): ?>
+    <div class="card">
+        <div class="card-titulo">
+            📊 Saldo por produto — <?= esc($nomeVendedorSel) ?> — <?= formatarData($dataFiltro) ?>
+        </div>
+        <div class="tabela-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>Produto</th>
+                        <th style="text-align:center">Saída</th>
+                        <th style="text-align:center">Retorno</th>
+                        <th style="text-align:center">Vendido</th>
+                        <th style="text-align:center">Saldo</th>
+                        <th style="text-align:center">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($resumoSaidas as $cod => $r):
+                        $saldo    = $r['saida'] - $r['retorno'] - $r['vendido'];
+                        $corLinha = $saldo == 0 ? 'var(--verde)' : ($saldo > 0 ? 'var(--vermelho)' : 'var(--amarelo)');
+                    ?>
+                    <tr>
+                        <td><small style="color:var(--cinza-texto)"><?= esc($cod) ?></small></td>
+                        <td><?= esc($r['produto']) ?></td>
+                        <td style="text-align:center"><?= $r['saida'] ?></td>
+                        <td style="text-align:center"><?= $r['retorno'] ?></td>
+                        <td style="text-align:center"><?= $r['vendido'] ?></td>
+                        <td style="text-align:center; font-weight:bold; color:<?= $corLinha ?>">
+                            <?= $saldo ?>
+                        </td>
+                        <td style="text-align:center">
+                            <?php if ($saldo == 0): ?>
+                                <span class="badge badge-verde">✅ OK</span>
+                            <?php elseif ($saldo > 0): ?>
+                                <span class="badge badge-vermelho">⚠️ Pendente</span>
+                            <?php else: ?>
+                                <span class="badge badge-amarelo">🔍 Verificar</span>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+                <tfoot>
+                    <tr style="font-weight:bold; background:var(--cinza-claro)">
+                        <td colspan="2">TOTAL GERAL</td>
+                        <td style="text-align:center"><?= $totalSaida ?></td>
+                        <td style="text-align:center"><?= $totalRetorno ?></td>
+                        <td style="text-align:center"><?= $totalVendido ?></td>
+                        <td style="text-align:center; color:<?= $corSaldo ?>"><?= $totalSaldo ?></td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+    <?php else: ?>
+        <div class="alerta alerta-aviso">
+            ⚠️ Nenhuma saída confirmada encontrada para este vendedor nesta data.
+        </div>
+    <?php endif; ?>
 
-        <div style="display:flex; gap:12px; margin-top:20px">
-            <button type="submit" class="btn btn-verde btn-grande">
-                💾 Salvar Pedido
+    <!-- ── Pedidos já lançados ──────────────────────────────────── -->
+    <?php if (!empty($pedidosLancados)): ?>
+    <div class="card">
+        <div class="card-titulo">📋 Pedidos lançados</div>
+        <div class="tabela-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Pedido</th>
+                        <th>Itens</th>
+                        <th style="text-align:center">Total (unid.)</th>
+                        <th style="text-align:center">Ação</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($pedidosLancados as $ped): ?>
+                    <tr>
+                        <td><strong><?= esc($ped['pedido']) ?></strong></td>
+                        <td style="font-size:13px; color:var(--cinza-texto); max-width:400px">
+                            <?= esc($ped['descricao']) ?>
+                        </td>
+                        <td style="text-align:center"><?= $ped['total_itens'] ?></td>
+                        <td style="text-align:center">
+                            <form method="post"
+                                  onsubmit="return confirm('Excluir o pedido \'<?= esc($ped['pedido']) ?>\'?')">
+                                <input type="hidden" name="acao"        value="del_pedido">
+                                <input type="hidden" name="vendedor_id" value="<?= $vendedorId ?>">
+                                <input type="hidden" name="data"        value="<?= $dataFiltro ?>">
+                                <input type="hidden" name="pedido_del"  value="<?= esc($ped['pedido']) ?>">
+                                <button type="submit" class="btn btn-vermelho"
+                                        style="padding:6px 14px; font-size:13px">
+                                    🗑 Excluir
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <!-- ── Formulário: adicionar pedido ────────────────────────── -->
+    <div class="card">
+        <div class="card-titulo">➕ Lançar pedido de venda</div>
+        <p style="color:var(--cinza-texto); font-size:13px; margin-bottom:16px">
+            Vendedor: <strong><?= esc($nomeVendedorSel) ?></strong>
+            — Data: <strong><?= formatarData($dataFiltro) ?></strong>
+        </p>
+
+        <form method="post" id="form-venda" autocomplete="off">
+            <input type="hidden" name="acao"        value="add_pedido">
+            <input type="hidden" name="vendedor_id" value="<?= $vendedorId ?>">
+            <input type="hidden" name="data"        value="<?= $dataFiltro ?>">
+
+            <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px">
+                <div class="grupo-campo" style="flex:1; min-width:200px">
+                    <label>Número do Pedido <span style="color:red">*</span></label>
+                    <input type="text" name="pedido" class="campo"
+                           placeholder="Ex: PV-001, NF-1234, 00123..."
+                           maxlength="100" required autocomplete="off"
+                           value="<?= isset($_POST['pedido']) && $erro ? esc($_POST['pedido']) : '' ?>">
+                </div>
+                <div class="grupo-campo" style="flex:1; min-width:200px">
+                    <label>Observação <small style="font-weight:normal">(opcional)</small></label>
+                    <input type="text" name="obs" class="campo"
+                           placeholder="Ex: Entrega parcial, cliente X..."
+                           maxlength="200">
+                </div>
+            </div>
+
+            <div class="grade-header">
+                <div>Buscar produto</div>
+                <div>Produto selecionado</div>
+                <div style="text-align:center">Qtd</div>
+                <div></div>
+            </div>
+            <div id="grade-produtos"></div>
+
+            <button type="button" onclick="adicionarLinha()"
+                    class="btn btn-secundario" style="margin-top:10px">
+                + Adicionar Produto
             </button>
-            <a href="?vendedor_id=<?= $vendedorId ?>&data=<?= $dataFiltro ?>"
-               class="btn btn-secundario btn-grande">Cancelar</a>
-        </div>
-    </form>
-</div>
-<?php endif; ?>
 
-<?php endif; // vendedorId > 0 ?>
+            <div style="display:flex; gap:12px; margin-top:20px">
+                <button type="submit" class="btn btn-verde btn-grande">
+                    💾 Salvar Pedido
+                </button>
+                <a href="?vendedor_id=<?= $vendedorId ?>&data=<?= $dataFiltro ?>"
+                   class="btn btn-secundario btn-grande">Cancelar</a>
+            </div>
+        </form>
+    </div>
+
+    <?php endif; // vendedorId > 0 ?>
+
+<?php endif; // bloqueado ?>
 
 </main>
 
@@ -443,7 +462,6 @@ require_once __DIR__ . '/../includes/header.php';
 <script>
 const BASE_URL = '<?= BASE_URL ?>';
 
-// ── Grade de produtos (igual ao padrão do sistema) ────────────────
 function criarLinhaHTML() {
     return `
         <div class="grade-cel-busca">
@@ -527,7 +545,6 @@ document.addEventListener('click', e => {
         document.querySelectorAll('.autocomplete-lista').forEach(l => l.style.display = 'none');
 });
 
-// Validação antes de submeter
 const formVenda = document.getElementById('form-venda');
 if (formVenda) {
     formVenda.addEventListener('submit', function(e) {
@@ -544,7 +561,6 @@ if (formVenda) {
     });
 }
 
-// Inicia com uma linha em branco
 adicionarLinha();
 </script>
 

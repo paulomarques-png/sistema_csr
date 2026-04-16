@@ -4,7 +4,7 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 
-verificarPerfil(['operador', 'supervisor', 'master']);
+verificarPerfil(['admin', 'operador', 'supervisor', 'master']);
 
 $pdo   = conectar();
 $etapa = $_GET['etapa'] ?? 'form';

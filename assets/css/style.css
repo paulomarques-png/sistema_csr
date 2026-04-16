@@ -59,7 +59,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 10px 24px;
+    padding: 5px 24px;
     gap: 16px;
     box-shadow: var(--sombra);
 }
@@ -75,7 +75,7 @@ body {
     transition: opacity .2s;
 }
 .logo-img:hover { opacity: .8; }
-.logo-texto {
+.logo-texto, .logo-texto h1 {
     font-size: 22px;
     font-weight: bold;
     cursor: pointer;
@@ -83,12 +83,7 @@ body {
     user-select: none;
 }
 
-.header-titulo h1 {
-    font-size: 18px;
-    font-weight: bold;
-    letter-spacing: .5px;
-    color: var(--secundaria);
-}
+
 
 .header-info {
     display: flex;
@@ -827,4 +822,108 @@ tr.audit-linha-aviso:hover td { background: #fef3c7; }
     font-size: 12px;
     color: var(--cinza-texto);
     align-items: center;
+}
+
+/* ================================================================
+   ADMIN (pages/admin.php)
+   Adicionar ao FINAL de: assets/css/style.css
+   ================================================================ */
+
+.admin-descricao {
+    color: var(--cinza-texto);
+    font-size: 14px;
+    margin-bottom: 16px;
+    line-height: 1.5;
+}
+
+/* ── Card de perigo (reset) ─────────────────────────────────── */
+.admin-card-perigo {
+    border-left: 5px solid var(--vermelho);
+}
+
+/* ── Preview da logo ────────────────────────────────────────── */
+.admin-logo-preview {
+    margin-bottom: 20px;
+}
+.admin-logo-img {
+    max-height: 80px;
+    max-width: 240px;
+    border: 2px solid var(--cinza);
+    border-radius: var(--raio);
+    padding: 6px;
+    background: var(--cinza-claro);
+    display: block;
+}
+.admin-logo-vazia {
+    display: inline-block;
+    padding: 16px 24px;
+    background: var(--cinza-claro);
+    border: 2px dashed var(--cinza);
+    border-radius: var(--raio);
+    color: var(--cinza-texto);
+    font-size: 13px;
+}
+.admin-logo-form { max-width: 480px; }
+
+/* ── Backup — tabela de contagens ──────────────────────────── */
+.admin-backup-info {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 420px;
+}
+.admin-backup-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: var(--cinza-claro);
+    border-radius: var(--raio);
+    font-size: 13px;
+}
+.admin-backup-tabela {
+    font-family: monospace;
+    color: var(--primaria);
+    font-weight: 600;
+}
+
+/* ── Reset — contagens ──────────────────────────────────────── */
+.admin-reset-contagens {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: 420px;
+    margin-bottom: 8px;
+}
+.admin-reset-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 12px;
+    background: #fff5f5;
+    border-radius: var(--raio);
+    font-size: 13px;
+    border-left: 3px solid var(--vermelho);
+}
+
+/* ── Lista do modal de aviso ────────────────────────────────── */
+.admin-reset-lista {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.admin-reset-lista li {
+    padding: 4px 0 4px 20px;
+    position: relative;
+    font-size: 14px;
+}
+.admin-reset-lista li::before {
+    content: '•';
+    position: absolute;
+    left: 6px;
+    color: var(--vermelho);
+    font-weight: bold;
 }

@@ -1,14 +1,10 @@
 <?php
-// ============================================================
-// pages/relatorios.php — Relatório Unificado de Movimentação
-// Salvar em: C:\xampp\htdocs\sistema_csr\pages\relatorios.php
-// ============================================================
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 
-verificarPerfil(['administrativo', 'supervisor', 'master']);
+verificarPerfil(['admin', 'operador', 'supervisor', 'master']);
 
 $pdo   = conectar();
 $etapa = $_GET['etapa'] ?? 'form';

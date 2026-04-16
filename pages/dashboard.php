@@ -183,7 +183,7 @@ $statusVenda   = verificarHorario('venda');
         <?php endif; ?>
 
         <?php if (in_array($_SESSION['usuario_perfil'], ['admin','supervisor','master'])): ?>
-        <a href="<?= BASE_URL ?>/pages/venda.php" class="btn-operacao btn-op-venda">
+        <a href="<?= BASE_URL ?>/pages/confirmar_venda.php" class="btn-operacao btn-op-venda">
             <span class="btn-op-icone">✅</span>
             <span class="btn-op-label">Confirmar Venda</span>
         </a>
