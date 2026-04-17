@@ -1,6 +1,6 @@
 <?php
 // ============================================================
-// pages/relatorios.php
+// pages/relatorios.php — Relatório Unificado de Movimentação
 // Salvar em: C:\xampp\htdocs\sistema_csr\pages\relatorios.php
 // ============================================================
 require_once __DIR__ . '/../config/config.php';
@@ -10,14 +10,13 @@ require_once __DIR__ . '/../includes/functions.php';
 
 verificarPerfil(['admin', 'supervisor', 'master']);
 
-// Injeta CSS específico desta página via header.php
-$cssExtra = 'relatorios';
+// $cssExtra removido — estilos migrados para style.css
 
 $pdo     = conectar();
 $perfil  = $_SESSION['usuario_perfil'] ?? '';
 $usuario = $_SESSION['usuario_nome']   ?? 'Usuário';
 
-// ── Filtros ─────────────────────────────────────────────────
+// ── Filtros ──────────────────────────────────────────────────────
 $data_ini   = $_GET['data_ini']    ?? date('Y-m-d');
 $data_fim   = $_GET['data_fim']    ?? date('Y-m-d');
 $vid_filtro = $_GET['vendedor_id'] ?? '';
@@ -31,9 +30,7 @@ $vendedores = $pdo->query(
     "SELECT id, nome FROM vendedores WHERE ativo = 1 ORDER BY nome"
 )->fetchAll();
 
-// ============================================================
-// MONTAGEM DOS DADOS
-// ============================================================
+// ── Montagem dos dados ───────────────────────────────────────────
 $dados = [];
 foreach ($vendedores as $v) {
     $dados[$v['id']] = [
@@ -178,7 +175,7 @@ if ($so_pend) {
     $dados = array_filter($dados, fn($v) => $v['tem_pendencia'] || $v['qr_pendentes'] > 0);
 }
 
-// Ordenação
+// Ordenação: negativos → pendentes → com movimento → sem movimento → alfabético
 uasort($dados, function ($a, $b) {
     $ca = $a['tem_pendencia'] && $a['saldo'] < 0;
     $cb = $b['tem_pendencia'] && $b['saldo'] < 0;
@@ -207,7 +204,7 @@ $csv_qs = http_build_query([
     'apenas_pendencias' => $so_pend ? '1' : '',
 ]);
 
-// ── Helpers ──────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────
 function badgeStatus(int $saldo, bool $mov): string {
     if (!$mov) return '<span class="badge badge-cinza">— Sem movimento</span>';
     if ($saldo === 0) return '<span class="badge badge-verde">✓ Zerado</span>';
@@ -238,22 +235,23 @@ function classeSaldo(int $saldo): string {
 ?>
 <?php include __DIR__ . '/../includes/header.php'; ?>
 
-<div class="page-top">
-    <h2>📊 Relatório de Movimentação</h2>
-    <p>Saídas · Retornos · Vendas · Saldos · Pendências — por vendedor e produto</p>
-</div>
-
+<!-- Cabeçalho visível apenas na impressão -->
 <div class="print-header">
     <strong><?= SISTEMA_NOME ?> — Relatório de Movimentação</strong><br>
     <small>Período: <?= esc($periodo_label) ?> &nbsp;|&nbsp; Gerado em: <?= date('d/m/Y H:i') ?> &nbsp;|&nbsp; Por: <?= esc($usuario) ?></small>
 </div>
 
+<div class="page-top">
+    <h2>📊 Relatório de Movimentação</h2>
+    <p>Saídas · Retornos · Vendas · Saldos · Pendências — por vendedor e produto</p>
+</div>
+
 <main>
 
-<!-- ── Filtros ────────────────────────────────────────────── -->
-<div class="card card-filtros">
+<!-- ── Filtros ────────────────────────────────────────────────── -->
+<div class="card">
     <div class="card-titulo">🔍 Filtros</div>
-    <form method="GET" action="relatorios.php" class="filtros-form">
+    <form method="GET" action="relatorios.php" class="rel-filtros">
 
         <div class="grupo-campo">
             <label>Data início</label>
@@ -265,7 +263,7 @@ function classeSaldo(int $saldo): string {
             <input type="date" name="data_fim" class="campo" value="<?= esc($data_fim) ?>">
         </div>
 
-        <div class="grupo-campo filtros-vendedor">
+        <div class="grupo-campo">
             <label>Vendedor</label>
             <select name="vendedor_id" class="campo">
                 <option value="">— Todos os vendedores —</option>
@@ -277,18 +275,18 @@ function classeSaldo(int $saldo): string {
             </select>
         </div>
 
-        <div class="grupo-campo filtros-check">
-            <label class="label-invisivel">_</label>
-            <label class="check-pendencias">
+        <div class="grupo-campo rel-check">
+            <label style="visibility:hidden">_</label>
+            <label style="display:flex; align-items:center; gap:8px; font-weight:normal; cursor:pointer; margin-bottom:0">
                 <input type="checkbox" name="apenas_pendencias" value="1"
                        <?= $so_pend ? 'checked' : '' ?>>
                 Apenas pendências
             </label>
         </div>
 
-        <div class="grupo-campo filtros-acoes">
-            <label class="label-invisivel">_</label>
-            <div class="filtros-botoes">
+        <div class="grupo-campo rel-acoes">
+            <label style="visibility:hidden">_</label>
+            <div style="display:flex; gap:8px; flex-wrap:wrap">
                 <button type="submit" class="btn btn-primario">🔍 Filtrar</button>
                 <div class="dd-wrap" id="ddExport">
                     <button type="button" class="btn btn-secundario"
@@ -308,7 +306,7 @@ function classeSaldo(int $saldo): string {
     </form>
 </div>
 
-<!-- ── Alertas ────────────────────────────────────────────── -->
+<!-- ── Alertas ────────────────────────────────────────────────── -->
 <?php if ($g_pend > 0): ?>
 <div class="alerta alerta-aviso">
     ⚠️ <strong><?= $g_pend ?> vendedor(es) com saldo em aberto</strong>
@@ -333,38 +331,38 @@ function classeSaldo(int $saldo): string {
 </div>
 <?php endif; ?>
 
-<!-- ── Stats ──────────────────────────────────────────────── -->
+<!-- ── Cards de stats ─────────────────────────────────────────── -->
 <div class="grid-stats">
-    <div class="card-stat azul">
-        <div class="stat-num azul"><?= $g_saida ?></div>
+    <div class="card-stat" style="border-left-color:var(--acento)">
+        <div class="stat-num" style="color:var(--acento)"><?= $g_saida ?></div>
         <div class="stat-label">📤 Total Saídas</div>
     </div>
-    <div class="card-stat azul">
-        <div class="stat-num azul"><?= $g_retorno ?></div>
+    <div class="card-stat" style="border-left-color:#6f42c1">
+        <div class="stat-num" style="color:#6f42c1"><?= $g_retorno ?></div>
         <div class="stat-label">📥 Total Retornos</div>
     </div>
-    <div class="card-stat verde">
-        <div class="stat-num verde"><?= $g_vendido ?></div>
+    <div class="card-stat" style="border-left-color:var(--verde)">
+        <div class="stat-num" style="color:var(--verde)"><?= $g_vendido ?></div>
         <div class="stat-label">✅ Total Vendidos</div>
     </div>
-    <?php $cs = $g_saldo === 0 ? 'verde' : ($g_saldo > 0 ? 'amarelo' : 'vermelho'); ?>
-    <div class="card-stat <?= $cs ?>">
-        <div class="stat-num <?= $cs ?>"><?= $g_saldo ?></div>
+    <?php
+        $corSaldo = $g_saldo === 0 ? 'var(--verde)' : ($g_saldo > 0 ? 'var(--amarelo)' : 'var(--vermelho)');
+    ?>
+    <div class="card-stat" style="border-left-color:<?= $corSaldo ?>">
+        <div class="stat-num" style="color:<?= $corSaldo ?>"><?= $g_saldo ?></div>
         <div class="stat-label">⚖️ Saldo Geral</div>
     </div>
 </div>
 
-<!-- ── Tabela principal ───────────────────────────────────── -->
-<div class="card card-tabela">
+<!-- ── Tabela principal ───────────────────────────────────────── -->
+<div class="card">
 
-    <div class="card-tabela-header">
-        <div class="card-titulo" style="margin-bottom:0;border:none;padding:0">
-            📋 Movimentação por Vendedor — <?= esc($periodo_label) ?>
-        </div>
-        <small style="color:var(--cinza-texto)">
+    <div class="card-titulo" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px">
+        <span>📋 Movimentação por Vendedor — <?= esc($periodo_label) ?></span>
+        <small style="color:var(--cinza-texto); font-weight:normal">
             <?= count($dados) ?> vendedor(es)
             <?php if ($g_pend > 0): ?>
-            &nbsp;·&nbsp; <strong style="color:var(--vermelho)"><?= $g_pend ?> com pendência</strong>
+                &nbsp;·&nbsp; <strong style="color:var(--vermelho)"><?= $g_pend ?> com pendência</strong>
             <?php endif; ?>
         </small>
     </div>
@@ -400,7 +398,7 @@ function classeSaldo(int $saldo): string {
             </td>
             <td class="col-num">
                 <?= $vend['tot_saida'] > 0
-                    ? '<strong class="cor-primaria">' . $vend['tot_saida'] . '</strong>'
+                    ? '<strong style="color:var(--acento)">' . $vend['tot_saida'] . '</strong>'
                     : '<span class="traco">—</span>' ?>
             </td>
             <td class="col-num">
@@ -410,7 +408,7 @@ function classeSaldo(int $saldo): string {
             </td>
             <td class="col-num">
                 <?= $vend['tot_vendido'] > 0
-                    ? '<strong class="cor-verde">' . $vend['tot_vendido'] . '</strong>'
+                    ? '<strong style="color:var(--verde)">' . $vend['tot_vendido'] . '</strong>'
                     : '<span class="traco">—</span>' ?>
             </td>
             <td class="col-num">
@@ -447,7 +445,8 @@ function classeSaldo(int $saldo): string {
                     <table class="tabela-sub">
                         <thead>
                             <tr>
-                                <th>Código</th><th>Produto</th>
+                                <th>Código</th>
+                                <th>Produto</th>
                                 <th class="col-num">Saída</th>
                                 <th class="col-num">Retorno</th>
                                 <th class="col-num">Vendido</th>
@@ -479,7 +478,9 @@ function classeSaldo(int $saldo): string {
                             <td class="col-num"><?= $sub_s ?></td>
                             <td class="col-num"><?= $sub_r ?></td>
                             <td class="col-num"><?= $sub_v ?></td>
-                            <td class="col-num"><strong class="<?= classeSaldo($sub_sal) ?>"><?= $sub_sal ?></strong></td>
+                            <td class="col-num">
+                                <strong class="<?= classeSaldo($sub_sal) ?>"><?= $sub_sal ?></strong>
+                            </td>
                             <td></td>
                         </tr>
                         </tbody>
@@ -494,9 +495,14 @@ function classeSaldo(int $saldo): string {
                     <table class="tabela-extrato">
                         <thead>
                             <tr>
-                                <th>Data</th><th>Hora</th><th>Tipo</th><th>Código</th>
-                                <th>Produto</th><th class="col-num">Qtd</th>
-                                <th>Pedido</th><th>Observação</th>
+                                <th>Data</th>
+                                <th>Hora</th>
+                                <th>Tipo</th>
+                                <th>Código</th>
+                                <th>Produto</th>
+                                <th class="col-num">Qtd</th>
+                                <th>Pedido</th>
+                                <th>Observação</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -556,20 +562,20 @@ function classeSaldo(int $saldo): string {
     <div class="legenda-cores">
         <strong>Legenda:</strong>
         <span class="legenda-item">
-            <span class="legenda-bolinha" style="background:#f0fff4;border:1px solid #c3e6cb"></span> Zerado
+            <span class="legenda-bolinha" style="background:#f0fff4; border:1px solid #c3e6cb"></span> Zerado
         </span>
         <span class="legenda-item">
-            <span class="legenda-bolinha" style="background:#fffbea;border:1px solid #ffeeba"></span> Em aberto
+            <span class="legenda-bolinha" style="background:#fffbea; border:1px solid #ffeeba"></span> Em aberto
         </span>
         <span class="legenda-item">
-            <span class="legenda-bolinha" style="background:#fff0f0;border:1px solid #f5c6cb"></span> Verificar (negativo)
+            <span class="legenda-bolinha" style="background:#fff0f0; border:1px solid #f5c6cb"></span> Verificar (negativo)
         </span>
         <span class="legenda-item">
-            <span class="legenda-bolinha" style="background:#e9ecef;border:1px solid #ccc"></span> Sem movimento
+            <span class="legenda-bolinha" style="background:#e9ecef; border:1px solid #ccc"></span> Sem movimento
         </span>
     </div>
 
-</div><!-- /card-tabela -->
+</div>
 
 </main>
 
@@ -613,7 +619,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <?php endforeach; ?>
 });
 
-document.querySelector('.filtros-form').addEventListener('submit', function(e) {
+document.querySelector('.rel-filtros').addEventListener('submit', function(e) {
     var ini = this.querySelector('[name=data_ini]').value;
     var fim = this.querySelector('[name=data_fim]').value;
     if (ini && fim && fim < ini) {

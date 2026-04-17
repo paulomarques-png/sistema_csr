@@ -12,9 +12,6 @@ $paginaAtual = basename($_SERVER['PHP_SELF'], '.php');
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= SISTEMA_NOME ?></title>
     <link rel="stylesheet" href="<?= BASE_URL ?>/assets/css/style.css">
-    <?php if (!empty($cssExtra)): ?>
-    <link rel="stylesheet" href="<?= BASE_URL ?>/assets/css/<?= $cssExtra ?>.css">
-    <?php endif; ?>
 </head>
 <body>
 
@@ -62,7 +59,7 @@ $paginaAtual = basename($_SERVER['PHP_SELF'], '.php');
 
 <nav class="site-nav">
     <a href="<?= BASE_URL ?>/index.php"
-       class="<?= $paginaAtual === 'index' ? 'ativo' : '' ?>">
+       class="<?= $paginaAtual === 'dashboard' ? 'ativo' : '' ?>">
         🏠 Início
     </a>
 
@@ -79,7 +76,7 @@ $paginaAtual = basename($_SERVER['PHP_SELF'], '.php');
 
     <?php if (in_array($_SESSION['usuario_perfil'] ?? '', ['admin','supervisor','master'])): ?>
     <a href="<?= BASE_URL ?>/pages/confirmar_venda.php"
-       class="<?= $paginaAtual === 'venda' ? 'ativo' : '' ?>">
+       class="<?= $paginaAtual === 'confirmar_venda' ? 'ativo' : '' ?>">
         ✅ Confirmar Venda
     </a>
     <?php endif; ?>

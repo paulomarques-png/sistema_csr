@@ -10,12 +10,12 @@ define('SISTEMA_VERSAO',  '1.0');
 define('BASE_URL',        'http://192.168.0.102/sistema_csr'); // Troque em produção
 
 // ── Horários de operação ────────────────────────────────
-define('HORA_SAIDA_INICIO',   '06:00');
-define('HORA_SAIDA_FIM',      '12:00');
-define('HORA_RETORNO_INICIO', '12:00');
-define('HORA_RETORNO_FIM',    '20:00');
+define('HORA_SAIDA_INICIO',   '08:00');
+define('HORA_SAIDA_FIM',      '23:00');
+define('HORA_RETORNO_INICIO', '08:00');
+define('HORA_RETORNO_FIM',    '23:00');
 define('HORA_VENDA_INICIO',   '08:00');
-define('HORA_VENDA_FIM',      '18:00');
+define('HORA_VENDA_FIM',      '23:00');
 
 // ── Segurança ───────────────────────────────────────────
 define('SESSAO_TIMEOUT',      1800);   // 30 minutos em segundos

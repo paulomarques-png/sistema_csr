@@ -927,3 +927,166 @@ tr.audit-linha-aviso:hover td { background: #fef3c7; }
     color: var(--vermelho);
     font-weight: bold;
 }
+
+/* ================================================================
+   RELATÓRIOS (pages/relatorios.php)
+   Colar no final de: assets/css/style.css
+   Após isso, o arquivo assets/css/relatorios.css pode ser deletado.
+   ================================================================ */
+
+/* ── Cards de estatísticas ──────────────────────────────────── */
+.grid-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 20px;
+}
+.card-stat {
+    background: var(--branco);
+    border-radius: var(--raio);
+    box-shadow: var(--sombra);
+    padding: 18px 20px;
+    border-left: 4px solid var(--acento);
+}
+.stat-num {
+    font-size: 1.8rem;
+    font-weight: 800;
+    line-height: 1;
+    color: var(--primaria);
+}
+.stat-label {
+    font-size: 12px;
+    color: var(--cinza-texto);
+    margin-top: 6px;
+}
+
+@media (max-width: 800px) { .grid-stats { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 460px) { .grid-stats { grid-template-columns: 1fr; } }
+
+/* ── Filtros do relatório ────────────────────────────────────── */
+.rel-filtros {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1.5fr auto auto;
+    gap: 12px;
+    align-items: end;
+}
+.rel-filtros .grupo-campo { margin-bottom: 0; }
+.rel-check, .rel-acoes { display: flex; flex-direction: column; }
+
+@media (max-width: 900px) {
+    .rel-filtros { grid-template-columns: 1fr 1fr; }
+    .rel-acoes   { grid-column: 1 / -1; flex-direction: row; align-items: flex-end; gap: 8px; }
+}
+@media (max-width: 500px) {
+    .rel-filtros { grid-template-columns: 1fr; }
+}
+
+/* ── Dropdown de exportação ─────────────────────────────────── */
+.dd-wrap { position: relative; display: inline-block; }
+.dd-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    background: var(--branco);
+    border: 1.5px solid var(--cinza);
+    border-radius: var(--raio);
+    box-shadow: var(--sombra);
+    min-width: 200px;
+    z-index: 300;
+    overflow: hidden;
+}
+.dd-wrap.aberto .dd-menu { display: block; }
+.dd-menu a {
+    display: block;
+    padding: 10px 16px;
+    color: #333;
+    text-decoration: none;
+    font-size: 13px;
+    transition: background .15s;
+}
+.dd-menu a:hover { background: var(--cinza-claro); }
+
+/* ── Área de detalhe expandível ─────────────────────────────── */
+.detalhe-inner {
+    background: var(--cinza-claro);
+    border-radius: var(--raio);
+    padding: 16px;
+    margin: 4px 0 8px;
+}
+.detalhe-secao {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--primaria);
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--cinza);
+}
+
+/* ── Sub-tabela (saldo por produto) ─────────────────────────── */
+.tabela-sub { font-size: 13px; }
+.tabela-sub th { background: #3a3a9a; font-size: 12px; padding: 8px 10px; }
+.tabela-sub td { padding: 7px 10px; }
+
+/* ── Tabela extrato cronológico ─────────────────────────────── */
+.tabela-extrato { font-size: 13px; }
+.tabela-extrato th { background: #495057; font-size: 12px; padding: 8px 10px; }
+.tabela-extrato td { padding: 7px 10px; }
+.td-obs { max-width: 200px; font-size: 12px; color: var(--cinza-texto); }
+
+/* ── Linha de totais ────────────────────────────────────────── */
+.linha-total td {
+    background: #eef0ff;
+    font-weight: bold;
+    border-top: 2px solid var(--primaria);
+}
+
+/* ── Badges de tipo de movimentação ─────────────────────────── */
+.badge-tipo-saida   { background: #dbeafe; color: #1e40af; }
+.badge-tipo-retorno { background: #ede9fe; color: #5b21b6; }
+.badge-tipo-venda   { background: #d1fae5; color: #065f46; }
+
+/* ── Helpers de coluna ──────────────────────────────────────── */
+.col-num  { text-align: center; white-space: nowrap; }
+.col-acao { text-align: center; white-space: nowrap; width: 100px; }
+
+/* ── Helpers de texto ───────────────────────────────────────── */
+.traco       { color: var(--cinza-texto); }
+.nowrap      { white-space: nowrap; }
+.td-vazio    { text-align: center; padding: 24px; color: var(--cinza-texto); font-style: italic; }
+.aviso-negativo {
+    display: block;
+    font-size: 11px;
+    color: var(--vermelho);
+    font-weight: normal;
+    margin-top: 2px;
+}
+.cod {
+    font-family: monospace;
+    font-size: 12px;
+    background: var(--cinza-claro);
+    padding: 2px 5px;
+    border-radius: 3px;
+}
+.saldo-grande { font-size: 1.05rem; }
+.btn-pequeno  { padding: 5px 12px; font-size: 12px; }
+
+/* ── Cabeçalho de impressão (oculto na tela) ────────────────── */
+.print-header { display: none; }
+
+@media print {
+    .print-header {
+        display: block;
+        text-align: center;
+        padding: 12px;
+        margin-bottom: 16px;
+        border-bottom: 2px solid #333;
+        font-size: 14px;
+    }
+    .site-header, .site-nav, footer,
+    .rel-filtros, .dd-wrap, .btn,
+    .btn-pequeno { display: none !important; }
+    .linha-detalhe { display: table-row !important; }
+    .detalhe-inner { background: white; }
+    .page-top { background: none; color: #000; padding: 8px 0; }
+}
