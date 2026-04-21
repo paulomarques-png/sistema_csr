@@ -206,18 +206,19 @@ if ($etapa === 'corrigir' && $tokenCorrVal) {
 
     // Tenta buscar itens não confirmados da data original
     $stmtIt = $pdo->prepare("
-        SELECT codigo, produto, quantidade FROM reg_saidas
+        SELECT codigo, produto, quantidade FROM reg_retornos
         WHERE vendedor_id = :vid AND data = :data AND confirmado = 0
         ORDER BY id ASC
     ");
     $stmtIt->execute([':vid' => $tkCorr['vendedor_id'], ':data' => $tkCorr['data_ref']]);
     $itensCorr = $stmtIt->fetchAll();
 
+
     // Se não encontrou (itens foram apagados em testes), busca os confirmados do dia
     // para pelo menos mostrar o histórico como referência
     if (empty($itensCorr)) {
         $stmtIt2 = $pdo->prepare("
-            SELECT codigo, produto, quantidade FROM reg_saidas
+            SELECT codigo, produto, quantidade FROM reg_retornos
             WHERE vendedor_id = :vid AND data = :data
             ORDER BY id DESC LIMIT 10
         ");

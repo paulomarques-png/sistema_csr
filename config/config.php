@@ -10,19 +10,19 @@ define('SISTEMA_VERSAO',  '1.0');
 define('BASE_URL',        'http://192.168.0.102/sistema_csr'); // Troque em produção
 
 // ── Horários de operação ────────────────────────────────
-define('HORA_SAIDA_INICIO',   '08:00');
-define('HORA_SAIDA_FIM',      '23:00');
-define('HORA_RETORNO_INICIO', '08:00');
-define('HORA_RETORNO_FIM',    '23:00');
-define('HORA_VENDA_INICIO',   '08:00');
-define('HORA_VENDA_FIM',      '23:00');
+define('HORA_SAIDA_INICIO',   '00:00');
+define('HORA_SAIDA_FIM',      '23:59');
+define('HORA_RETORNO_INICIO', '00:00');
+define('HORA_RETORNO_FIM',    '23:59');
+define('HORA_VENDA_INICIO',   '00:00');
+define('HORA_VENDA_FIM',      '23:59');
 
 // ── Segurança ───────────────────────────────────────────
-define('SESSAO_TIMEOUT',      1800);   // 30 minutos em segundos
+define('SESSAO_TIMEOUT',       1800);   // 30 minutos em segundos
 define('MAX_TENTATIVAS_LOGIN', 3);     // Tentativas antes de bloquear
-define('BLOQUEIO_MINUTOS',    15);     // Minutos de bloqueio
-define('QR_EXPIRACAO_HORAS',   2);     // Validade do token QR
-define('MANUTENCAO_TIMEOUT',  900);   // 15 min de timeout do modo manutenção
+define('BLOQUEIO_MINUTOS',     15);     // Minutos de bloqueio
+define('QR_EXPIRACAO_HORAS',   0.02);     // Validade do token QR
+define('MANUTENCAO_TIMEOUT',   900);   // 15 min de timeout do modo manutenção
 
 // ── Cores do sistema (para uso no PHP quando necessário) ─
 define('COR_PRIMARIA',   '#2B2B88');

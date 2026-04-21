@@ -1090,3 +1090,590 @@ tr.audit-linha-aviso:hover td { background: #fef3c7; }
     .detalhe-inner { background: white; }
     .page-top { background: none; color: #000; padding: 8px 0; }
 }
+
+/* ================================================================
+   DASHBOARD — PARTE 9 (Melhorias)
+   Adicionar ao FINAL de: assets/css/style.css
+   ================================================================ */
+
+/* ── Alerta de pendências de dias anteriores ─────────────────── */
+.dash-alerta-pendencias {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+.dash-alerta-icone {
+    font-size: 22px;
+    line-height: 1;
+    flex-shrink: 0;
+}
+.dash-alerta-corpo {
+    flex: 1;
+}
+.dash-pendencias-lista {
+    margin-top: 6px;
+    padding-left: 18px;
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.dash-pendencia-link {
+    margin-left: 10px;
+    color: #856404;
+    font-weight: 600;
+    font-size: 12px;
+    text-decoration: none;
+    border-bottom: 1px dashed currentColor;
+    white-space: nowrap;
+}
+.dash-pendencia-link:hover {
+    color: #533d00;
+    border-bottom-style: solid;
+}
+
+/* ── Card de QR Codes ────────────────────────────────────────── */
+.dash-card-qr {
+    border-left: 4px solid var(--amarelo);
+}
+.dash-qr-titulo {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.dash-qr-badges {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+/* ── Seções internas do card QR ─────────────────────────────── */
+.dash-qr-secao {
+    margin-bottom: 16px;
+}
+.dash-qr-secao:last-child {
+    margin-bottom: 0;
+}
+.dash-qr-secao-titulo {
+    font-size: 13px;
+    font-weight: 700;
+    padding: 6px 10px;
+    border-radius: var(--raio) var(--raio) 0 0;
+    margin-bottom: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.dash-qr-aguardando {
+    background: #fff3cd;
+    color: #856404;
+    border-left: 3px solid var(--amarelo);
+}
+.dash-qr-rejeitado {
+    background: #f8d7da;
+    color: #721c24;
+    border-left: 3px solid var(--vermelho);
+}
+.dash-qr-expirado {
+    background: #e2e3e5;
+    color: #383d41;
+    border-left: 3px solid var(--cinza);
+}
+.dash-qr-expirado-aviso {
+    font-size: 11px;
+    font-weight: 400;
+    opacity: .75;
+}
+
+/* ── Cores de linha por tipo de QR ──────────────────────────── */
+.dash-tr-aguardando td { background: #fffbea; }
+.dash-tr-aguardando:hover td { background: #fef3c7; }
+
+.dash-tr-rejeitado td { background: #fff5f5; }
+.dash-tr-rejeitado:hover td { background: #ffe4e6; }
+
+.dash-tr-expirado td { background: #f8f9fa; }
+.dash-tr-expirado:hover td { background: #e9ecef; }
+
+/* ── Gráfico semanal ─────────────────────────────────────────── */
+.dash-grafico-wrapper {
+    padding-top: 4px;
+}
+.dash-grafico-canvas {
+    display: block;
+    width: 100%;
+    height: 190px;
+}
+.dash-grafico-legenda {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--cinza-claro);
+    font-size: 12px;
+    color: var(--cinza-texto);
+}
+.dash-leg-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.dash-leg-cor {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+/* ── Responsivo mobile ───────────────────────────────────────── */
+@media (max-width: 600px) {
+    .dash-qr-titulo { flex-direction: column; align-items: flex-start; }
+    .dash-pendencias-lista { font-size: 12px; }
+    .dash-pendencia-link { display: block; margin-left: 0; margin-top: 2px; }
+    .dash-grafico-canvas { height: 160px; }
+}
+
+/* ================================================================
+   APP DO VENDEDOR — PARTE 10 (mobile-first)
+   Adicionar ao FINAL de: assets/css/style.css
+   ================================================================ */
+
+/* ── Layout principal do app ─────────────────────────────────── */
+.vapp-main {
+    max-width: 480px; /* mobile-first: largura confortável no celular */
+    margin: 0 auto;
+    padding: 12px 14px;
+}
+
+/* ── Sem vínculo ─────────────────────────────────────────────── */
+.vapp-sem-vinculo {
+    text-align: center;
+    padding: 40px 24px;
+}
+.vapp-sem-vinculo-icone { font-size: 52px; margin-bottom: 12px; }
+.vapp-sem-vinculo h2    { color: var(--primaria); margin-bottom: 8px; }
+.vapp-sem-vinculo p     { color: var(--cinza-texto); font-size: 14px; line-height: 1.6; }
+
+/* ── Alerta de QR pendente ───────────────────────────────────── */
+.vapp-qr-alerta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #fff3cd;
+    border: 1.5px solid #ffc107;
+    border-radius: var(--raio);
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    animation: vapp-pulso 2s ease-in-out infinite;
+}
+@keyframes vapp-pulso {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255,193,7,.4); }
+    50%       { box-shadow: 0 0 0 6px rgba(255,193,7,0); }
+}
+.vapp-qr-alerta-icone { font-size: 28px; flex-shrink: 0; }
+.vapp-qr-alerta-texto { flex: 1; }
+.vapp-qr-alerta-texto strong { color: #856404; font-size: 14px; }
+.vapp-qr-alerta-texto small  { color: #856404; font-size: 12px; display: block; margin-top: 2px; }
+.vapp-qr-alerta-btn {
+    background: #856404;
+    color: white;
+    padding: 10px 14px;
+    border-radius: var(--raio);
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 13px;
+    white-space: nowrap;
+    transition: filter .15s;
+    flex-shrink: 0;
+}
+.vapp-qr-alerta-btn:hover { filter: brightness(1.15); }
+
+/* ── Cabeçalho de saldo ──────────────────────────────────────── */
+.vapp-saldo-header {
+    padding: 12px 0 8px;
+}
+.vapp-saldo-nome {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--primaria);
+}
+.vapp-saldo-data {
+    font-size: 13px;
+    color: var(--cinza-texto);
+    margin-top: 2px;
+}
+
+/* ── Card de saldo total ─────────────────────────────────────── */
+.vapp-card-saldo {
+    border-radius: 14px;
+    padding: 20px 22px;
+    margin-bottom: 12px;
+    text-align: center;
+}
+.vapp-card-saldo--zero     { background: linear-gradient(135deg, #d4edda, #f0fff4); border: 1.5px solid #c3e6cb; }
+.vapp-card-saldo--aberto   { background: linear-gradient(135deg, #fff3cd, #fffbea); border: 1.5px solid #ffeeba; }
+.vapp-card-saldo--negativo { background: linear-gradient(135deg, #f8d7da, #fff0f0); border: 1.5px solid #f5c6cb; }
+
+.vapp-card-saldo-num {
+    font-size: 2.4rem;
+    font-weight: 900;
+    line-height: 1.1;
+    color: var(--primaria);
+}
+.vapp-card-saldo--aberto   .vapp-card-saldo-num { color: #856404; }
+.vapp-card-saldo--negativo .vapp-card-saldo-num { color: var(--vermelho); }
+
+.vapp-card-saldo-label {
+    font-size: 13px;
+    color: var(--cinza-texto);
+    margin-top: 4px;
+}
+
+/* ── Grid de estatísticas 3 colunas ─────────────────────────── */
+.vapp-grid-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 16px;
+}
+.vapp-stat {
+    background: white;
+    border-radius: var(--raio);
+    padding: 14px 10px;
+    text-align: center;
+    box-shadow: var(--sombra);
+}
+.vapp-stat-num {
+    font-size: 1.5rem;
+    font-weight: 800;
+    line-height: 1.1;
+}
+.vapp-stat-saida   { color: var(--primaria); }
+.vapp-stat-retorno { color: var(--acento); }
+.vapp-stat-venda   { color: var(--verde); }
+.vapp-stat-label {
+    font-size: 11px;
+    color: var(--cinza-texto);
+    margin-top: 4px;
+}
+
+/* ── Seções ──────────────────────────────────────────────────── */
+.vapp-secao {
+    background: white;
+    border-radius: var(--raio);
+    box-shadow: var(--sombra);
+    padding: 16px;
+    margin-bottom: 12px;
+}
+.vapp-secao-titulo {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--primaria);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--cinza-claro);
+}
+
+/* ── Lista de produtos ───────────────────────────────────────── */
+.vapp-lista-produtos {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.vapp-prod {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: var(--raio);
+    border-left: 4px solid var(--cinza);
+    background: var(--cinza-claro);
+}
+.vapp-prod--zero     { border-left-color: var(--verde);   background: #f0fff4; }
+.vapp-prod--aberto   { border-left-color: var(--amarelo); background: #fffbea; }
+.vapp-prod--negativo { border-left-color: var(--vermelho);background: #fff0f0; }
+
+.vapp-prod-info { flex: 1; min-width: 0; }
+.vapp-prod-nome {
+    font-weight: 700;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.vapp-prod-cod {
+    font-size: 11px;
+    color: var(--cinza-texto);
+    font-family: monospace;
+    margin-top: 1px;
+}
+.vapp-prod-nums {
+    font-size: 11px;
+    color: var(--cinza-texto);
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+}
+.vapp-prod-saldo { flex-shrink: 0; }
+
+/* ── Estado vazio ────────────────────────────────────────────── */
+.vapp-vazio {
+    text-align: center;
+    padding: 24px;
+    color: var(--cinza-texto);
+}
+.vapp-vazio-icone { font-size: 40px; margin-bottom: 8px; }
+
+/* ── Histórico 7 dias ────────────────────────────────────────── */
+.vapp-historico {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 5px;
+    margin-bottom: 12px;
+}
+.vapp-dia {
+    background: var(--cinza-claro);
+    border-radius: 8px;
+    padding: 8px 4px;
+    text-align: center;
+    font-size: 11px;
+    border: 1.5px solid transparent;
+    transition: transform .15s;
+}
+.vapp-dia:hover { transform: translateY(-2px); }
+.vapp-dia--hoje     { border-color: var(--primaria); background: #eef0ff; }
+.vapp-dia--zero     { background: #f0fff4; border-color: #c3e6cb; }
+.vapp-dia--aberto   { background: #fffbea; border-color: #ffeeba; }
+.vapp-dia--negativo { background: #fff0f0; border-color: #f5c6cb; }
+
+.vapp-dia-nome {
+    font-weight: 700;
+    font-size: 10px;
+    color: var(--cinza-texto);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+}
+.vapp-dia-hoje-tag {
+    font-size: 8px;
+    background: var(--primaria);
+    color: white;
+    border-radius: 4px;
+    padding: 1px 3px;
+    font-weight: 700;
+}
+.vapp-dia-data {
+    font-size: 12px;
+    font-weight: 700;
+    color: #333;
+    margin-top: 4px;
+}
+.vapp-dia-saldo {
+    margin-top: 6px;
+    min-height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.vapp-dia-saldo-num {
+    font-size: 15px;
+    font-weight: 900;
+    color: var(--vermelho);
+}
+.vapp-dia-detalhe {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 9px;
+    color: var(--cinza-texto);
+    margin-top: 4px;
+}
+.vapp-dia-vazio {
+    color: var(--cinza);
+    font-size: 16px;
+    margin-top: 8px;
+}
+
+.vapp-historico-legenda {
+    display: flex;
+    gap: 12px;
+    font-size: 11px;
+    color: var(--cinza-texto);
+    flex-wrap: wrap;
+    padding-top: 8px;
+    border-top: 1px solid var(--cinza-claro);
+}
+.vapp-leg-cor {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    vertical-align: middle;
+    margin-right: 3px;
+}
+
+/* ── Rodapé do app ───────────────────────────────────────────── */
+.vapp-footer-info {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0 20px;
+}
+.vapp-btn-atualizar {
+    background: white;
+    border: 1.5px solid var(--cinza);
+    color: var(--cinza-texto);
+    padding: 8px 16px;
+    border-radius: var(--raio);
+    font-size: 13px;
+    cursor: pointer;
+    transition: background .15s;
+}
+.vapp-btn-atualizar:hover { background: var(--cinza-claro); }
+.vapp-footer-hora {
+    font-size: 12px;
+    color: var(--cinza-texto);
+}
+
+/* ── Responsivo: telas maiores que 480px ─────────────────────── */
+@media (min-width: 500px) {
+    .vapp-main {
+        padding: 20px;
+    }
+    .vapp-card-saldo-num {
+        font-size: 3rem;
+    }
+    .vapp-stat-num {
+        font-size: 1.8rem;
+    }
+}
+
+/* ================================================================
+   NOTIFICAÇÕES — PARTE 11
+   Adicionar ao FINAL de: assets/css/style.css
+   ================================================================ */
+
+/* ── Badge de alerta na navbar ───────────────────────────────── */
+.nav-badge-alerta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--vermelho);
+    color: white;
+    font-size: 10px;
+    font-weight: 800;
+    min-width: 17px;
+    height: 17px;
+    border-radius: 9px;
+    padding: 0 4px;
+    margin-left: 5px;
+    vertical-align: middle;
+    line-height: 1;
+    animation: badge-pop .3s ease;
+}
+@keyframes badge-pop {
+    0%   { transform: scale(0); }
+    70%  { transform: scale(1.2); }
+    100% { transform: scale(1); }
+}
+
+/* ── Área de toasts ──────────────────────────────────────────── */
+.toast-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 360px;
+    pointer-events: none;
+}
+
+/* ── Toast individual ────────────────────────────────────────── */
+.toast {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 14px 16px;
+    border-radius: var(--raio);
+    box-shadow: 0 4px 20px rgba(0,0,0,.18);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.4;
+    pointer-events: all;
+    cursor: pointer;
+    animation: toast-in .35s cubic-bezier(.34,1.56,.64,1);
+    transition: opacity .3s, transform .3s;
+}
+.toast.saindo {
+    opacity: 0;
+    transform: translateX(20px);
+}
+@keyframes toast-in {
+    from { opacity: 0; transform: translateX(40px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+.toast-erro   { background: #fff0f0; border-left: 4px solid var(--vermelho); color: #721c24; }
+.toast-aviso  { background: #fffbea; border-left: 4px solid var(--amarelo);  color: #856404; }
+.toast-info   { background: #e8f4fd; border-left: 4px solid var(--acento);   color: #0c4a6e; }
+.toast-sucesso{ background: #f0fff4; border-left: 4px solid var(--verde);     color: #155724; }
+
+.toast-icone  { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+.toast-corpo  { flex: 1; }
+.toast-fechar {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    font-size: 16px;
+    cursor: pointer;
+    opacity: .5;
+    padding: 0;
+    line-height: 1;
+    color: inherit;
+}
+.toast-fechar:hover { opacity: 1; }
+
+/* ── Indicador de polling ────────────────────────────────────── */
+.notif-status {
+    position: fixed;
+    bottom: 8px;
+    left: 14px;
+    font-size: 10px;
+    color: var(--cinza-texto);
+    opacity: .5;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    pointer-events: none;
+    z-index: 100;
+}
+.notif-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--cinza);
+    flex-shrink: 0;
+    transition: background .3s;
+}
+.notif-dot.ativo   { background: var(--verde); }
+.notif-dot.erro    { background: var(--vermelho); }
+
+/* ── Responsivo ──────────────────────────────────────────────── */
+@media (max-width: 600px) {
+    .toast-container {
+        bottom: 12px;
+        right: 12px;
+        left: 12px;
+        max-width: none;
+    }
+}

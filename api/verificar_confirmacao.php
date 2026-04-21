@@ -20,7 +20,7 @@ if (empty($token)) {
 
 $pdo  = conectar();
 $stmt = $pdo->prepare("
-    SELECT usado, rejeitado, rejeitado_motivo, tipo, vendedor_id, data_ref, expira_em
+    SELECT usado, rejeitado, rejeitado_motivo, tipo, vendedor_id, data_ref, expira_em, status
     FROM qr_tokens
     WHERE token = :token
 ");
@@ -32,10 +32,16 @@ if (!$tk) {
     exit;
 }
 
+// Usa a coluna status como fonte da verdade principal,
+// com fallback para as colunas usado/rejeitado por compatibilidade
+$eConfirmado = ($tk['status'] === 'confirmado') || ($tk['usado'] && !$tk['rejeitado'] && $tk['status'] !== 'rejeitado');
+$eRejeitado  = ($tk['status'] === 'rejeitado')  || (bool)$tk['rejeitado'];
+$eExpirado   = !$eConfirmado && !$eRejeitado && strtotime($tk['expira_em']) < time();
+
 echo json_encode([
-    'confirmado' => ($tk['usado'] && !$tk['rejeitado']),
-    'rejeitado'  => (bool)$tk['rejeitado'],
+    'confirmado' => $eConfirmado,
+    'rejeitado'  => $eRejeitado,
     'motivo'     => $tk['rejeitado_motivo'] ?? '',
-    'expirado'   => strtotime($tk['expira_em']) < time(),
+    'expirado'   => $eExpirado,
     'tipo'       => $tk['tipo'],
 ]);

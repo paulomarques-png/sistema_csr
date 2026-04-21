@@ -10,8 +10,6 @@ require_once __DIR__ . '/../includes/functions.php';
 
 verificarPerfil(['admin', 'supervisor', 'master']);
 
-// $cssExtra removido — estilos migrados para style.css
-
 $pdo     = conectar();
 $perfil  = $_SESSION['usuario_perfil'] ?? '';
 $usuario = $_SESSION['usuario_nome']   ?? 'Usuário';

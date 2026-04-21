@@ -7,7 +7,7 @@ require_once __DIR__ . '/../includes/functions.php';
 verificarPerfil(['supervisor', 'master']);
 
 $pdo = conectar();
-$aba = $_GET['aba'] ?? 'vendedores'; // aba ativa: vendedores | produtos | usuarios
+$aba = $_GET['aba'] ?? 'vendedores';
 $msg = '';
 $erro = '';
 
@@ -21,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ── VENDEDORES ───────────────────────────────────────────────
 
     if ($acao === 'novo_vendedor') {
-        $nome  = trim($_POST['nome'] ?? '');
+        $nome  = trim($_POST['nome']  ?? '');
         $senha = trim($_POST['senha'] ?? '');
         if (empty($nome) || empty($senha)) {
             $erro = 'Nome e senha são obrigatórios.';
@@ -36,9 +36,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($acao === 'editar_vendedor') {
-        $id    = (int)($_POST['id'] ?? 0);
-        $nome  = trim($_POST['nome'] ?? '');
-        $senha = trim($_POST['senha'] ?? '');
+        $id    = (int)($_POST['id']    ?? 0);
+        $nome  = trim($_POST['nome']   ?? '');
+        $senha = trim($_POST['senha']  ?? '');
         if (empty($nome)) {
             $erro = 'Nome é obrigatório.';
         } else {
@@ -57,11 +57,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($acao === 'toggle_vendedor') {
-        $id    = (int)($_POST['id'] ?? 0);
+        $id    = (int)($_POST['id']    ?? 0);
         $ativo = (int)($_POST['ativo'] ?? 0);
         $novo  = $ativo ? 0 : 1;
-        $stmt  = $pdo->prepare("UPDATE vendedores SET ativo=:ativo WHERE id=:id");
-        $stmt->execute([':ativo' => $novo, ':id' => $id]);
+        $pdo->prepare("UPDATE vendedores SET ativo=:ativo WHERE id=:id")
+            ->execute([':ativo' => $novo, ':id' => $id]);
         setFlash('ok', 'Status do vendedor atualizado.');
         $aba = 'vendedores';
     }
@@ -69,23 +69,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ── PRODUTOS ─────────────────────────────────────────────────
 
     if ($acao === 'novo_produto') {
-        $codigo   = strtoupper(trim($_POST['codigo']   ?? ''));
-        $descricao= trim($_POST['descricao'] ?? '');
-        $unidade  = strtoupper(trim($_POST['unidade']  ?? ''));
+        $codigo    = strtoupper(trim($_POST['codigo']    ?? ''));
+        $descricao = trim($_POST['descricao'] ?? '');
+        $unidade   = strtoupper(trim($_POST['unidade']   ?? ''));
         if (empty($codigo) || empty($descricao)) {
             $erro = 'Código e descrição são obrigatórios.';
         } else {
-            // Verifica código duplicado
             $chk = $pdo->prepare("SELECT id FROM produtos WHERE codigo = :codigo");
             $chk->execute([':codigo' => $codigo]);
             if ($chk->fetch()) {
                 $erro = "Código \"$codigo\" já existe.";
             } else {
-                $stmt = $pdo->prepare("
-                    INSERT INTO produtos (codigo, descricao, unidade)
-                    VALUES (:codigo, :descricao, :unidade)
-                ");
-                $stmt->execute([':codigo' => $codigo, ':descricao' => $descricao, ':unidade' => $unidade]);
+                $pdo->prepare("INSERT INTO produtos (codigo, descricao, unidade) VALUES (:codigo, :descricao, :unidade)")
+                    ->execute([':codigo' => $codigo, ':descricao' => $descricao, ':unidade' => $unidade]);
                 registrarLog('CADASTRO', "Novo produto: $codigo - $descricao", obterIP());
                 setFlash('ok', "Produto \"$codigo\" cadastrado com sucesso!");
             }
@@ -94,24 +90,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($acao === 'editar_produto') {
-        $id       = (int)($_POST['id'] ?? 0);
-        $codigo   = strtoupper(trim($_POST['codigo']    ?? ''));
-        $descricao= trim($_POST['descricao']  ?? '');
-        $unidade  = strtoupper(trim($_POST['unidade']   ?? ''));
+        $id        = (int)($_POST['id']        ?? 0);
+        $codigo    = strtoupper(trim($_POST['codigo']    ?? ''));
+        $descricao = trim($_POST['descricao']  ?? '');
+        $unidade   = strtoupper(trim($_POST['unidade']   ?? ''));
         if (empty($codigo) || empty($descricao)) {
             $erro = 'Código e descrição são obrigatórios.';
         } else {
-            // Verifica duplicata (exceto o próprio)
             $chk = $pdo->prepare("SELECT id FROM produtos WHERE codigo = :codigo AND id != :id");
             $chk->execute([':codigo' => $codigo, ':id' => $id]);
             if ($chk->fetch()) {
                 $erro = "Código \"$codigo\" já pertence a outro produto.";
             } else {
-                $stmt = $pdo->prepare("
-                    UPDATE produtos SET codigo=:codigo, descricao=:descricao, unidade=:unidade
-                    WHERE id=:id
-                ");
-                $stmt->execute([':codigo' => $codigo, ':descricao' => $descricao, ':unidade' => $unidade, ':id' => $id]);
+                $pdo->prepare("UPDATE produtos SET codigo=:codigo, descricao=:descricao, unidade=:unidade WHERE id=:id")
+                    ->execute([':codigo' => $codigo, ':descricao' => $descricao, ':unidade' => $unidade, ':id' => $id]);
                 registrarLog('EDICAO', "Produto editado: id=$id codigo=$codigo", obterIP());
                 setFlash('ok', "Produto atualizado com sucesso!");
             }
@@ -120,11 +112,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($acao === 'toggle_produto') {
-        $id    = (int)($_POST['id'] ?? 0);
+        $id    = (int)($_POST['id']    ?? 0);
         $ativo = (int)($_POST['ativo'] ?? 0);
         $novo  = $ativo ? 0 : 1;
-        $stmt  = $pdo->prepare("UPDATE produtos SET ativo=:ativo WHERE id=:id");
-        $stmt->execute([':ativo' => $novo, ':id' => $id]);
+        $pdo->prepare("UPDATE produtos SET ativo=:ativo WHERE id=:id")
+            ->execute([':ativo' => $novo, ':id' => $id]);
         setFlash('ok', 'Status do produto atualizado.');
         $aba = 'produtos';
     }
@@ -133,21 +125,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($acao === 'novo_usuario') {
         verificarPerfil(['master']);
-        $nome   = trim($_POST['nome']   ?? '');
-        $perfil = trim($_POST['perfil'] ?? '');
-        $senha  = trim($_POST['senha']  ?? '');
-        $perfisValidos = ['operador','admin','supervisor','master'];
+        $nome          = trim($_POST['nome']          ?? '');
+        $perfil        = trim($_POST['perfil']        ?? '');
+        $senha         = trim($_POST['senha']         ?? '');
+        $vendedor_id   = ($perfil === 'vendedor' && !empty($_POST['vendedor_id']))
+                            ? (int)$_POST['vendedor_id'] : null;
+
+        // ✅ perfil vendedor adicionado à lista válida
+        $perfisValidos = ['operador', 'admin', 'supervisor', 'master', 'vendedor'];
+
         if (empty($nome) || empty($perfil) || empty($senha)) {
             $erro = 'Todos os campos são obrigatórios.';
         } elseif (!in_array($perfil, $perfisValidos)) {
             $erro = 'Perfil inválido.';
+        } elseif ($perfil === 'vendedor' && empty($vendedor_id)) {
+            $erro = 'Selecione o vendedor vinculado ao perfil Vendedor.';
         } else {
             $hash = password_hash($senha, PASSWORD_BCRYPT, ['cost' => 12]);
-            $stmt = $pdo->prepare("
-                INSERT INTO usuarios (nome, perfil, senha_hash)
-                VALUES (:nome, :perfil, :hash)
-            ");
-            $stmt->execute([':nome' => $nome, ':perfil' => $perfil, ':hash' => $hash]);
+            $pdo->prepare("
+                INSERT INTO usuarios (nome, perfil, senha_hash, vendedor_id)
+                VALUES (:nome, :perfil, :hash, :vid)
+            ")->execute([':nome' => $nome, ':perfil' => $perfil, ':hash' => $hash, ':vid' => $vendedor_id]);
             registrarLog('CADASTRO', "Novo usuário: $nome ($perfil)", obterIP());
             setFlash('ok', "Usuário \"$nome\" cadastrado com sucesso!");
         }
@@ -156,22 +154,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($acao === 'editar_usuario') {
         verificarPerfil(['master']);
-        $id     = (int)($_POST['id']     ?? 0);
-        $nome   = trim($_POST['nome']    ?? '');
-        $perfil = trim($_POST['perfil']  ?? '');
-        $senha  = trim($_POST['senha']   ?? '');
+        $id          = (int)($_POST['id']          ?? 0);
+        $nome        = trim($_POST['nome']          ?? '');
+        $perfil      = trim($_POST['perfil']        ?? '');
+        $senha       = trim($_POST['senha']         ?? '');
+        $vendedor_id = ($perfil === 'vendedor' && !empty($_POST['vendedor_id']))
+                            ? (int)$_POST['vendedor_id'] : null;
+
         if (empty($nome) || empty($perfil)) {
             $erro = 'Nome e perfil são obrigatórios.';
+        } elseif ($perfil === 'vendedor' && empty($vendedor_id)) {
+            $erro = 'Selecione o vendedor vinculado ao perfil Vendedor.';
         } else {
             if (!empty($senha)) {
                 $hash = password_hash($senha, PASSWORD_BCRYPT, ['cost' => 12]);
-                $stmt = $pdo->prepare("
-                    UPDATE usuarios SET nome=:nome, perfil=:perfil, senha_hash=:hash WHERE id=:id
-                ");
-                $stmt->execute([':nome' => $nome, ':perfil' => $perfil, ':hash' => $hash, ':id' => $id]);
+                $pdo->prepare("
+                    UPDATE usuarios SET nome=:nome, perfil=:perfil, senha_hash=:hash, vendedor_id=:vid WHERE id=:id
+                ")->execute([':nome' => $nome, ':perfil' => $perfil, ':hash' => $hash, ':vid' => $vendedor_id, ':id' => $id]);
             } else {
-                $stmt = $pdo->prepare("UPDATE usuarios SET nome=:nome, perfil=:perfil WHERE id=:id");
-                $stmt->execute([':nome' => $nome, ':perfil' => $perfil, ':id' => $id]);
+                $pdo->prepare("
+                    UPDATE usuarios SET nome=:nome, perfil=:perfil, vendedor_id=:vid WHERE id=:id
+                ")->execute([':nome' => $nome, ':perfil' => $perfil, ':vid' => $vendedor_id, ':id' => $id]);
             }
             registrarLog('EDICAO', "Usuário editado: id=$id nome=$nome perfil=$perfil", obterIP());
             setFlash('ok', "Usuário atualizado com sucesso!");
@@ -183,27 +186,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         verificarPerfil(['master']);
         $id    = (int)($_POST['id']    ?? 0);
         $ativo = (int)($_POST['ativo'] ?? 0);
-        // Impede desativar o próprio usuário logado
         if ($id === (int)$_SESSION['usuario_id']) {
             $erro = 'Você não pode desativar o próprio usuário.';
         } else {
             $novo = $ativo ? 0 : 1;
-            $stmt = $pdo->prepare("UPDATE usuarios SET ativo=:ativo WHERE id=:id");
-            $stmt->execute([':ativo' => $novo, ':id' => $id]);
+            $pdo->prepare("UPDATE usuarios SET ativo=:ativo WHERE id=:id")
+                ->execute([':ativo' => $novo, ':id' => $id]);
             setFlash('ok', 'Status do usuário atualizado.');
         }
         $aba = 'usuarios';
     }
 
-    // Redireciona para evitar reenvio de form (PRG pattern)
-    $flashOk   = flash('ok');
-    $redirMsg  = $erro   ? '&erro='   . urlencode($erro)    : '';
-    $redirMsg .= $flashOk? '&ok='     . urlencode($flashOk) : '';
+    $flashOk  = flash('ok');
+    $redirMsg  = $erro    ? '&erro=' . urlencode($erro)    : '';
+    $redirMsg .= $flashOk ? '&ok='   . urlencode($flashOk) : '';
     header("Location: " . BASE_URL . "/pages/cadastros.php?aba=$aba$redirMsg");
     exit;
 }
 
-// Lê mensagens da URL após redirect
 if (!empty($_GET['ok']))   $msg  = esc($_GET['ok']);
 if (!empty($_GET['erro'])) $erro = esc($_GET['erro']);
 
@@ -215,7 +215,7 @@ $buscaVendedor = trim($_GET['bv'] ?? '');
 $buscaProduto  = trim($_GET['bp'] ?? '');
 $buscaUsuario  = trim($_GET['bu'] ?? '');
 
-// Vendedores
+// Vendedores (lista completa para exibição)
 $sqlV = "SELECT * FROM vendedores WHERE 1=1";
 $parV = [];
 if ($buscaVendedor) {
@@ -226,6 +226,11 @@ $sqlV .= " ORDER BY ativo DESC, nome ASC";
 $stmtV = $pdo->prepare($sqlV);
 $stmtV->execute($parV);
 $vendedores = $stmtV->fetchAll();
+
+// ✅ Vendedores ativos para o select de vínculo nos modais de usuário
+$vendedoresAtivos = $pdo->query(
+    "SELECT id, nome FROM vendedores WHERE ativo = 1 ORDER BY nome ASC"
+)->fetchAll();
 
 // Produtos
 $sqlP = "SELECT * FROM produtos WHERE 1=1";
@@ -239,16 +244,21 @@ $stmtP = $pdo->prepare($sqlP);
 $stmtP->execute($parP);
 $produtos = $stmtP->fetchAll();
 
-// Usuários (somente master pode ver)
+// Usuários com nome do vendedor vinculado (somente master)
 $usuarios = [];
 if ($_SESSION['usuario_perfil'] === 'master') {
-    $sqlU = "SELECT * FROM usuarios WHERE 1=1";
+    $sqlU = "
+        SELECT u.*, v.nome AS vendedor_nome
+        FROM usuarios u
+        LEFT JOIN vendedores v ON v.id = u.vendedor_id
+        WHERE 1=1
+    ";
     $parU = [];
     if ($buscaUsuario) {
-        $sqlU .= " AND (nome LIKE :busca OR perfil LIKE :busca)";
+        $sqlU .= " AND (u.nome LIKE :busca OR u.perfil LIKE :busca)";
         $parU[':busca'] = "%$buscaUsuario%";
     }
-    $sqlU .= " ORDER BY ativo DESC, nome ASC";
+    $sqlU .= " ORDER BY u.ativo DESC, u.nome ASC";
     $stmtU = $pdo->prepare($sqlU);
     $stmtU->execute($parU);
     $usuarios = $stmtU->fetchAll();
@@ -276,6 +286,7 @@ if ($_SESSION['usuario_perfil'] === 'master') {
         <?php endif; ?>
     </div>
 
+
     <?php /* ════════════════════════════════════════════
            ABA VENDEDORES
            ════════════════════════════════════════════ */ ?>
@@ -288,7 +299,6 @@ if ($_SESSION['usuario_perfil'] === 'master') {
             </button>
         </div>
 
-        <!-- Busca -->
         <form method="get" style="display:flex; gap:8px; margin-bottom:16px;">
             <input type="hidden" name="aba" value="vendedores">
             <input type="text" name="bv" value="<?= esc($buscaVendedor) ?>"
@@ -299,7 +309,6 @@ if ($_SESSION['usuario_perfil'] === 'master') {
             <?php endif; ?>
         </form>
 
-        <!-- Tabela -->
         <div class="tabela-wrapper">
             <table>
                 <thead>
@@ -327,14 +336,12 @@ if ($_SESSION['usuario_perfil'] === 'master') {
                                 <?= $v['ativo'] ? 'Ativo' : 'Inativo' ?>
                             </span>
                         </td>
-                        <td style="text-align:center"><?= formatarData($v['criado_em']) ?></td>
+                        <td style="text-align:center"><?= formatarData($v['criado_em'] ?? null) ?></td>
                         <td style="text-align:center; white-space:nowrap">
-                            <!-- Editar -->
                             <button onclick="abrirEditarVendedor(<?= $v['id'] ?>, '<?= esc(addslashes($v['nome'])) ?>')"
                                     class="btn btn-acento" style="padding:4px 12px; font-size:13px">
                                 ✏️ Editar
                             </button>
-                            <!-- Ativar/Desativar -->
                             <form method="post" style="display:inline"
                                   onsubmit="return confirm('<?= $v['ativo'] ? 'Desativar' : 'Ativar' ?> este vendedor?')">
                                 <input type="hidden" name="acao"  value="toggle_vendedor">
@@ -367,7 +374,7 @@ if ($_SESSION['usuario_perfil'] === 'master') {
                 <div class="grupo-campo">
                     <label>Senha QR Code</label>
                     <input type="text" name="senha" class="campo"
-                           placeholder="Senha que o vendedor usará para confirmar no celular" required>
+                           placeholder="Senha para confirmar QR no celular" required>
                     <small style="color:var(--cinza-texto)">
                         ⚠️ Anote e entregue a senha ao vendedor. Ela não será exibida novamente.
                     </small>
@@ -419,7 +426,6 @@ if ($_SESSION['usuario_perfil'] === 'master') {
             </button>
         </div>
 
-        <!-- Busca -->
         <form method="get" style="display:flex; gap:8px; margin-bottom:16px;">
             <input type="hidden" name="aba" value="produtos">
             <input type="text" name="bp" value="<?= esc($buscaProduto) ?>"
@@ -430,7 +436,6 @@ if ($_SESSION['usuario_perfil'] === 'master') {
             <?php endif; ?>
         </form>
 
-        <!-- Tabela -->
         <div class="tabela-wrapper">
             <table>
                 <thead>
@@ -561,7 +566,6 @@ if ($_SESSION['usuario_perfil'] === 'master') {
             </button>
         </div>
 
-        <!-- Busca -->
         <form method="get" style="display:flex; gap:8px; margin-bottom:16px;">
             <input type="hidden" name="aba" value="usuarios">
             <input type="text" name="bu" value="<?= esc($buscaUsuario) ?>"
@@ -579,6 +583,7 @@ if ($_SESSION['usuario_perfil'] === 'master') {
                         <th>#</th>
                         <th>Nome</th>
                         <th style="text-align:center">Perfil</th>
+                        <th>Vendedor Vinculado</th>
                         <th style="text-align:center">Status</th>
                         <th style="text-align:center">Cadastrado em</th>
                         <th style="text-align:center">Ações</th>
@@ -586,39 +591,48 @@ if ($_SESSION['usuario_perfil'] === 'master') {
                 </thead>
                 <tbody>
                     <?php if (empty($usuarios)): ?>
-                    <tr><td colspan="6" style="text-align:center; color:var(--cinza-texto); padding:24px">
+                    <tr><td colspan="7" style="text-align:center; color:var(--cinza-texto); padding:24px">
                         Nenhum usuário encontrado.
                     </td></tr>
                     <?php endif; ?>
 
-                    <?php foreach ($usuarios as $u): ?>
+                    <?php foreach ($usuarios as $u):
+                        $corPerfil = match($u['perfil']) {
+                            'master'     => 'badge-vermelho',
+                            'supervisor' => 'badge-amarelo',
+                            'admin'      => 'badge-verde',
+                            'vendedor'   => 'badge-acento',   // ✅ badge azul para vendedor
+                            default      => 'badge-cinza',
+                        };
+                    ?>
                     <tr style="<?= $u['ativo'] ? '' : 'opacity:.55' ?>">
                         <td><?= $u['id'] ?></td>
                         <td>
                             <strong><?= esc($u['nome']) ?></strong>
                             <?php if ($u['id'] == $_SESSION['usuario_id']): ?>
-                                <span class="badge badge-azul" style="font-size:11px; background:#e8f4fd; color:var(--acento)">você</span>
+                                <span class="badge" style="font-size:11px; background:#e8f4fd; color:var(--acento)">você</span>
                             <?php endif; ?>
                         </td>
                         <td style="text-align:center">
-                            <?php
-                            $corPerfil = match($u['perfil']) {
-                                'master'     => 'badge-vermelho',
-                                'supervisor' => 'badge-amarelo',
-                                'admin'      => 'badge-verde',
-                                default      => 'badge-cinza',
-                            };
-                            ?>
                             <span class="badge <?= $corPerfil ?>"><?= esc($u['perfil']) ?></span>
+                        </td>
+                        <td>
+                            <?php if ($u['perfil'] === 'vendedor' && $u['vendedor_nome']): ?>
+                                <span style="font-size:13px">🔗 <?= esc($u['vendedor_nome']) ?></span>
+                            <?php elseif ($u['perfil'] === 'vendedor'): ?>
+                                <span style="color:var(--vermelho); font-size:12px">⚠️ Sem vínculo</span>
+                            <?php else: ?>
+                                <span style="color:var(--cinza-texto); font-size:13px">—</span>
+                            <?php endif; ?>
                         </td>
                         <td style="text-align:center">
                             <span class="badge <?= $u['ativo'] ? 'badge-verde' : 'badge-cinza' ?>">
                                 <?= $u['ativo'] ? 'Ativo' : 'Inativo' ?>
                             </span>
                         </td>
-                        <td style="text-align:center"><?= formatarData($u['criado_em']) ?></td>
+                        <td style="text-align:center"><?= formatarData($u['criado_em'] ?? null) ?></td>
                         <td style="text-align:center; white-space:nowrap">
-                            <button onclick="abrirEditarUsuario(<?= $u['id'] ?>, '<?= esc(addslashes($u['nome'])) ?>', '<?= esc($u['perfil']) ?>')"
+                            <button onclick="abrirEditarUsuario(<?= $u['id'] ?>, '<?= esc(addslashes($u['nome'])) ?>', '<?= esc($u['perfil']) ?>', <?= (int)($u['vendedor_id'] ?? 0) ?>)"
                                     class="btn btn-acento" style="padding:4px 12px; font-size:13px">
                                 ✏️ Editar
                             </button>
@@ -653,16 +667,34 @@ if ($_SESSION['usuario_perfil'] === 'master') {
                     <label>Nome</label>
                     <input type="text" name="nome" class="campo" placeholder="Nome completo" required autofocus>
                 </div>
+
                 <div class="grupo-campo">
                     <label>Perfil</label>
-                    <select name="perfil" class="campo" required>
+                    <select name="perfil" id="novo-usr-perfil" class="campo" required
+                            onchange="toggleVendedorSelect(this, 'novo-vendedor-grupo')">
                         <option value="">Selecione...</option>
                         <option value="operador">Operador — registra saídas e retornos</option>
                         <option value="admin">Admin — confirma vendas e relatórios</option>
                         <option value="supervisor">Supervisor — libera fora do horário</option>
                         <option value="master">Master — acesso total</option>
+                        <option value="vendedor">Vendedor — app mobile de acompanhamento</option>
                     </select>
                 </div>
+
+                <!-- ✅ Campo de vínculo — aparece só quando perfil=vendedor -->
+                <div class="grupo-campo" id="novo-vendedor-grupo" style="display:none">
+                    <label>Vendedor Vinculado <span style="color:red">*</span></label>
+                    <select name="vendedor_id" id="novo-usr-vendedor" class="campo">
+                        <option value="">— Selecione o vendedor —</option>
+                        <?php foreach ($vendedoresAtivos as $va): ?>
+                        <option value="<?= $va['id'] ?>"><?= esc($va['nome']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <small style="color:var(--cinza-texto)">
+                        Este vendedor poderá acompanhar seus registros pelo app mobile.
+                    </small>
+                </div>
+
                 <div class="grupo-campo">
                     <label>Senha</label>
                     <input type="password" name="senha" class="campo" placeholder="Senha de acesso" required>
@@ -681,21 +713,36 @@ if ($_SESSION['usuario_perfil'] === 'master') {
         <div class="modal-box">
             <h3>✏️ Editar Usuário</h3>
             <form method="post">
-                <input type="hidden" name="acao"   value="editar_usuario">
-                <input type="hidden" name="id"     id="edit-usr-id">
+                <input type="hidden" name="acao" value="editar_usuario">
+                <input type="hidden" name="id"   id="edit-usr-id">
                 <div class="grupo-campo">
                     <label>Nome</label>
                     <input type="text" name="nome" id="edit-usr-nome" class="campo" required>
                 </div>
+
                 <div class="grupo-campo">
                     <label>Perfil</label>
-                    <select name="perfil" id="edit-usr-perfil" class="campo" required>
+                    <select name="perfil" id="edit-usr-perfil" class="campo" required
+                            onchange="toggleVendedorSelect(this, 'edit-vendedor-grupo')">
                         <option value="operador">Operador</option>
                         <option value="admin">Admin</option>
                         <option value="supervisor">Supervisor</option>
                         <option value="master">Master</option>
+                        <option value="vendedor">Vendedor</option>
                     </select>
                 </div>
+
+                <!-- ✅ Campo de vínculo na edição -->
+                <div class="grupo-campo" id="edit-vendedor-grupo" style="display:none">
+                    <label>Vendedor Vinculado <span style="color:red">*</span></label>
+                    <select name="vendedor_id" id="edit-usr-vendedor" class="campo">
+                        <option value="">— Selecione o vendedor —</option>
+                        <?php foreach ($vendedoresAtivos as $va): ?>
+                        <option value="<?= $va['id'] ?>"><?= esc($va['nome']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
                 <div class="grupo-campo">
                     <label>Nova Senha <small style="font-weight:normal">(deixe em branco para manter)</small></label>
                     <input type="password" name="senha" class="campo" placeholder="Nova senha (opcional)">
@@ -721,27 +768,51 @@ if ($_SESSION['usuario_perfil'] === 'master') {
 
 <script src="<?= BASE_URL ?>/assets/js/main.js"></script>
 <script>
-// Preenche modal de edição — Vendedor
+
+// ── Mostra/oculta o campo de vínculo com vendedor ───────────────
+function toggleVendedorSelect(selectEl, grupoId) {
+    const grupo = document.getElementById(grupoId);
+    if (!grupo) return;
+    const ehVendedor = selectEl.value === 'vendedor';
+    grupo.style.display = ehVendedor ? 'block' : 'none';
+
+    // Torna o select obrigatório só quando visível
+    const sel = grupo.querySelector('select');
+    if (sel) sel.required = ehVendedor;
+}
+
+// ── Preenche modal de edição — Vendedor ─────────────────────────
 function abrirEditarVendedor(id, nome) {
     document.getElementById('edit-vend-id').value   = id;
     document.getElementById('edit-vend-nome').value = nome;
     abrirModal('modal-editar-vendedor');
 }
 
-// Preenche modal de edição — Produto
+// ── Preenche modal de edição — Produto ──────────────────────────
 function abrirEditarProduto(id, codigo, descricao, unidade) {
-    document.getElementById('edit-prod-id').value       = id;
-    document.getElementById('edit-prod-codigo').value   = codigo;
-    document.getElementById('edit-prod-descricao').value= descricao;
-    document.getElementById('edit-prod-unidade').value  = unidade;
+    document.getElementById('edit-prod-id').value        = id;
+    document.getElementById('edit-prod-codigo').value    = codigo;
+    document.getElementById('edit-prod-descricao').value = descricao;
+    document.getElementById('edit-prod-unidade').value   = unidade;
     abrirModal('modal-editar-produto');
 }
 
-// Preenche modal de edição — Usuário
-function abrirEditarUsuario(id, nome, perfil) {
-    document.getElementById('edit-usr-id').value     = id;
-    document.getElementById('edit-usr-nome').value   = nome;
-    document.getElementById('edit-usr-perfil').value = perfil;
+// ── Preenche modal de edição — Usuário ──────────────────────────
+// ✅ Recebe vendedor_id e restaura o campo de vínculo
+function abrirEditarUsuario(id, nome, perfil, vendedorId) {
+    document.getElementById('edit-usr-id').value    = id;
+    document.getElementById('edit-usr-nome').value  = nome;
+
+    const selPerfil = document.getElementById('edit-usr-perfil');
+    selPerfil.value = perfil;
+
+    // Aciona o toggle para mostrar/ocultar o campo de vínculo
+    toggleVendedorSelect(selPerfil, 'edit-vendedor-grupo');
+
+    // Seleciona o vendedor vinculado (se houver)
+    const selVendedor = document.getElementById('edit-usr-vendedor');
+    if (selVendedor) selVendedor.value = vendedorId || '';
+
     abrirModal('modal-editar-usuario');
 }
 </script>

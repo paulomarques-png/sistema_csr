@@ -9,13 +9,9 @@ verificarLogin();
 $pdo  = conectar();
 $hoje = date('Y-m-d');
 
-// ── Busca todos os vendedores ativos ─────────────────────────────
-$vendedores = $pdo->query("
-    SELECT id, nome FROM vendedores WHERE ativo = 1 ORDER BY nome
-")->fetchAll();
-
 // ── Monta o painel de resumo de HOJE por vendedor ────────────────
-function resumoVendedor(PDO $pdo, int $vendedorId, string $data): array {
+function resumoVendedor(PDO $pdo, int $vendedorId, string $data): array
+{
     $stmt = $pdo->prepare("
         SELECT COALESCE(SUM(quantidade), 0) AS total
         FROM reg_saidas WHERE vendedor_id = :vid AND data = :data
@@ -52,10 +48,12 @@ function resumoVendedor(PDO $pdo, int $vendedorId, string $data): array {
     return compact('saidas', 'retornos', 'vendas', 'saldo', 'status');
 }
 
-// ── Busca pendências de dias anteriores ──────────────────────────
-function buscarPendencias(PDO $pdo, string $hoje): array {
+// ── Busca pendências de dias anteriores (com vendedor_id para link) ──
+function buscarPendencias(PDO $pdo, string $hoje): array
+{
     $stmt = $pdo->query("
         SELECT
+            v.id AS vendedor_id,
             v.nome,
             s.data,
             (
@@ -73,33 +71,129 @@ function buscarPendencias(PDO $pdo, string $hoje): array {
     return $stmt->fetchAll();
 }
 
-$pendencias = buscarPendencias($pdo, $hoje);
+// ── QR Codes aguardando confirmação (não expirados) ──────────────
+function buscarQrsAguardando(PDO $pdo): array
+{
+    $stmt = $pdo->query("
+        SELECT
+            t.token,
+            t.tipo,
+            t.expira_em,
+            t.data_ref,
+            t.vendedor_id,
+            v.nome AS vendedor
+        FROM qr_tokens t
+        INNER JOIN vendedores v ON v.id = t.vendedor_id
+        WHERE t.usado = 0
+          AND t.rejeitado = 0
+          AND t.expira_em > NOW()
+        ORDER BY t.expira_em ASC
+    ");
+    return $stmt->fetchAll();
+}
 
-// ── Busca QRs pendentes e rejeitados (qualquer data, não expirados) ─
-// Usa as colunas reais: usado=0 significa pendente, rejeitado=1 significa rejeitado
-$pendentesQR = $pdo->query("
-    SELECT
-        t.token,
-        t.tipo,
-        t.expira_em,
-        t.data_ref,
-        t.rejeitado,
-        t.rejeitado_motivo,
-        v.nome AS vendedor
-    FROM qr_tokens t
-    INNER JOIN vendedores v ON v.id = t.vendedor_id
-    WHERE t.usado = 0
-      AND t.expira_em > NOW()
-    ORDER BY t.rejeitado DESC, t.criado_em DESC
+// ── QR Codes rejeitados pelo vendedor ────────────────────────────
+function buscarQrsRejeitados(PDO $pdo): array
+{
+    $stmt = $pdo->query("
+        SELECT
+            t.token,
+            t.tipo,
+            t.expira_em,
+            t.data_ref,
+            t.rejeitado_motivo,
+            v.nome AS vendedor
+        FROM qr_tokens t
+        INNER JOIN vendedores v ON v.id = t.vendedor_id
+        WHERE t.usado = 0
+          AND t.rejeitado = 1
+        ORDER BY t.expira_em DESC
+    ");
+    return $stmt->fetchAll();
+}
+
+// ── QR Codes expirados sem confirmação (NOVO) ────────────────────
+function buscarQrsExpirados(PDO $pdo): array
+{
+    $stmt = $pdo->query("
+        SELECT
+            t.token,
+            t.tipo,
+            t.expira_em,
+            t.data_ref,
+            t.vendedor_id,
+            v.nome AS vendedor
+        FROM qr_tokens t
+        INNER JOIN vendedores v ON v.id = t.vendedor_id
+        WHERE t.usado = 0
+          AND t.rejeitado = 0
+          AND t.expira_em <= NOW()
+        ORDER BY t.expira_em DESC
+        LIMIT 30
+    ");
+    return $stmt->fetchAll();
+}
+
+// ── Movimentação dos últimos 7 dias (NOVO) ───────────────────────
+function movimentacaoSemanal(PDO $pdo): array
+{
+    // Monta array dos 7 dias com valores zerados
+    $dias = [];
+    for ($i = 6; $i >= 0; $i--) {
+        $d = date('Y-m-d', strtotime("-{$i} days"));
+        $dias[$d] = ['data' => $d, 'saidas' => 0, 'retornos' => 0, 'vendas' => 0];
+    }
+
+    $inicio = date('Y-m-d', strtotime('-6 days'));
+
+    $stmt = $pdo->prepare("
+        SELECT data, COALESCE(SUM(quantidade), 0) AS total
+        FROM reg_saidas WHERE data >= :ini GROUP BY data
+    ");
+    $stmt->execute([':ini' => $inicio]);
+    foreach ($stmt->fetchAll() as $r) {
+        if (isset($dias[$r['data']])) $dias[$r['data']]['saidas'] = (int) $r['total'];
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT data, COALESCE(SUM(quantidade), 0) AS total
+        FROM reg_retornos WHERE data >= :ini GROUP BY data
+    ");
+    $stmt->execute([':ini' => $inicio]);
+    foreach ($stmt->fetchAll() as $r) {
+        if (isset($dias[$r['data']])) $dias[$r['data']]['retornos'] = (int) $r['total'];
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT data, COALESCE(SUM(quantidade), 0) AS total
+        FROM reg_vendas WHERE data >= :ini GROUP BY data
+    ");
+    $stmt->execute([':ini' => $inicio]);
+    foreach ($stmt->fetchAll() as $r) {
+        if (isset($dias[$r['data']])) $dias[$r['data']]['vendas'] = (int) $r['total'];
+    }
+
+    return array_values($dias);
+}
+
+// ── Busca todos os vendedores ativos ─────────────────────────────
+$vendedores = $pdo->query("
+    SELECT id, nome FROM vendedores WHERE ativo = 1 ORDER BY nome
 ")->fetchAll();
+
+$pendencias    = buscarPendencias($pdo, $hoje);
+$qrsAguardando = buscarQrsAguardando($pdo);
+$qrsRejeitados = buscarQrsRejeitados($pdo);
+$qrsExpirados  = buscarQrsExpirados($pdo);
+$semana        = movimentacaoSemanal($pdo);
+
+// Conta total de alertas QR para exibir no cabeçalho do card
+$totalAlertasQR = count($qrsAguardando) + count($qrsRejeitados) + count($qrsExpirados);
 
 // ── Monta resumo de todos os vendedores ──────────────────────────
 $resumos = [];
 foreach ($vendedores as $v) {
-    $resumos[$v['id']] = array_merge(
-        $v,
-        resumoVendedor($pdo, (int)$v['id'], $hoje)
-    );
+    $resumos[$v['id']] = array_merge($v, resumoVendedor($pdo, (int) $v['id'], $hoje));
 }
 
 // ── Status de horário atual ──────────────────────────────────────
@@ -111,18 +205,26 @@ $statusVenda   = verificarHorario('venda');
 
 <main>
 
-    <?php /* ── Alerta de pendências de dias anteriores ─────── */ ?>
+    <?php /* ── Alerta de pendências de dias anteriores ─────────────── */ ?>
     <?php if (!empty($pendencias)): ?>
-    <div class="alerta alerta-aviso" style="display:flex; align-items:flex-start; gap:10px;">
-        <span style="font-size:22px; line-height:1">⚠️</span>
-        <div>
+    <div class="alerta alerta-aviso dash-alerta-pendencias">
+        <span class="dash-alerta-icone">⚠️</span>
+        <div class="dash-alerta-corpo">
             <strong><?= count($pendencias) ?> pendência(s) de dias anteriores:</strong>
-            <ul style="margin-top:6px; padding-left:18px; font-size:13px;">
-                <?php foreach ($pendencias as $p): ?>
+            <ul class="dash-pendencias-lista">
+                <?php foreach ($pendencias as $p):
+                    $urlRelatorio = BASE_URL . '/pages/relatorios.php'
+                        . '?data_inicio=' . urlencode($p['data'])
+                        . '&data_fim='    . urlencode($p['data'])
+                        . '&vendedor_id=' . urlencode($p['vendedor_id']);
+                ?>
                     <li>
                         <strong><?= esc($p['nome']) ?></strong>
                         — <?= formatarData($p['data']) ?>
                         — Saldo: <strong><?= $p['saldo'] ?></strong> itens em aberto
+                        <a href="<?= $urlRelatorio ?>" class="dash-pendencia-link" title="Ver relatório deste dia">
+                            📊 Ver relatório →
+                        </a>
                     </li>
                 <?php endforeach; ?>
             </ul>
@@ -130,7 +232,7 @@ $statusVenda   = verificarHorario('venda');
     </div>
     <?php endif; ?>
 
-    <?php /* ── Banner de status de horário ─────────────────── */ ?>
+    <?php /* ── Banner de status de horário ─────────────────────────── */ ?>
     <div class="banners-horario">
 
         <div class="banner-status <?= $statusSaida === 'liberado' ? 'banner-liberado' : ($statusSaida === 'manutencao' ? 'banner-manut-info' : 'banner-bloqueado') ?>">
@@ -168,10 +270,10 @@ $statusVenda   = verificarHorario('venda');
 
     </div>
 
-    <?php /* ── Botões de operação ────────────────────────────── */ ?>
+    <?php /* ── Botões de operação ─────────────────────────────────── */ ?>
     <div class="botoes-operacao">
 
-        <?php if (in_array($_SESSION['usuario_perfil'], ['operador','supervisor','master'])): ?>
+        <?php if (in_array($_SESSION['usuario_perfil'], ['operador', 'supervisor', 'master'])): ?>
         <a href="<?= BASE_URL ?>/pages/saida.php" class="btn-operacao btn-op-saida">
             <span class="btn-op-icone">📤</span>
             <span class="btn-op-label">Registrar Saída</span>
@@ -182,7 +284,7 @@ $statusVenda   = verificarHorario('venda');
         </a>
         <?php endif; ?>
 
-        <?php if (in_array($_SESSION['usuario_perfil'], ['admin','supervisor','master'])): ?>
+        <?php if (in_array($_SESSION['usuario_perfil'], ['admin', 'supervisor', 'master'])): ?>
         <a href="<?= BASE_URL ?>/pages/confirmar_venda.php" class="btn-operacao btn-op-venda">
             <span class="btn-op-icone">✅</span>
             <span class="btn-op-label">Confirmar Venda</span>
@@ -193,7 +295,7 @@ $statusVenda   = verificarHorario('venda');
         </a>
         <?php endif; ?>
 
-        <?php if (in_array($_SESSION['usuario_perfil'], ['supervisor','master'])): ?>
+        <?php if (in_array($_SESSION['usuario_perfil'], ['supervisor', 'master'])): ?>
         <a href="<?= BASE_URL ?>/pages/cadastros.php" class="btn-operacao btn-op-cadastro">
             <span class="btn-op-icone">📋</span>
             <span class="btn-op-label">Cadastros</span>
@@ -202,69 +304,174 @@ $statusVenda   = verificarHorario('venda');
 
     </div>
 
-    <?php /* ── Painel de QRs pendentes / rejeitados ─────────── */ ?>
-    <?php if (!empty($pendentesQR)): ?>
-    <div class="card" style="border-left: 4px solid var(--amarelo)">
-        <div class="card-titulo">🔔 Confirmações Pendentes / Rejeitadas</div>
-        <div class="tabela-wrapper">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Vendedor</th>
-                        <th style="text-align:center">Tipo</th>
-                        <th style="text-align:center">Data</th>
-                        <th style="text-align:center">Status</th>
-                        <th style="text-align:center">Expira em</th>
-                        <th style="text-align:center">Ação</th>
-                    </tr>
-                </thead>
-                <tbody>
-                <?php foreach ($pendentesQR as $pqr): ?>
-                <tr style="background: <?= $pqr['rejeitado'] ? '#fff5f5' : '#fffbea' ?>">
-                    <td><strong><?= esc($pqr['vendedor']) ?></strong></td>
-                    <td style="text-align:center">
-                        <?= $pqr['tipo'] === 'saida' ? '📤 Saída' : '📥 Retorno' ?>
-                    </td>
-                    <td style="text-align:center">
-                        <?= formatarData($pqr['data_ref']) ?>
-                    </td>
-                    <td style="text-align:center">
-                        <?php if ($pqr['rejeitado']): ?>
-                            <span class="badge badge-vermelho">❌ Rejeitado</span>
-                            <?php if ($pqr['rejeitado_motivo']): ?>
-                                <br><small style="color:#888; font-style:italic">
-                                    <?= esc($pqr['rejeitado_motivo']) ?>
-                                </small>
-                            <?php endif; ?>
-                        <?php else: ?>
-                            <span class="badge badge-amarelo">⏳ Aguardando</span>
-                        <?php endif; ?>
-                    </td>
-                    <td style="text-align:center; font-size:13px; color:var(--cinza-texto)">
-                        <?= formatarDataHora($pqr['expira_em']) ?>
-                    </td>
-                    <td style="text-align:center; white-space:nowrap">
-                        <?php if ($pqr['rejeitado']): ?>
-                            <a href="<?= BASE_URL ?>/pages/<?= $pqr['tipo'] ?>.php?etapa=corrigir&token=<?= esc($pqr['token']) ?>"
-                               class="btn btn-vermelho" style="padding:4px 12px; font-size:13px; text-decoration:none">
-                                ✏️ Corrigir
-                            </a>
-                        <?php else: ?>
-                            <a href="<?= BASE_URL ?>/pages/<?= $pqr['tipo'] ?>.php?etapa=reenviar&vid=<?= $pqr['vendedor_id'] ?? '' ?>&data=<?= $pqr['data_ref'] ?>"
-                               class="btn btn-acento" style="padding:4px 12px; font-size:13px; text-decoration:none">
-                                📲 Reenviar QR
-                            </a>
-                        <?php endif; ?>
-                    </td>
-                </tr>
-                <?php endforeach; ?>
-                </tbody>
-            </table>
+    <?php /* ── Card de alertas de QR Code ──────────────────────────── */ ?>
+    <?php if ($totalAlertasQR > 0): ?>
+    <div class="card dash-card-qr">
+        <div class="card-titulo dash-qr-titulo">
+            <span>🔔 Confirmações QR Code</span>
+            <span class="dash-qr-badges">
+                <?php if (count($qrsAguardando) > 0): ?>
+                    <span class="badge badge-amarelo"><?= count($qrsAguardando) ?> aguardando</span>
+                <?php endif; ?>
+                <?php if (count($qrsRejeitados) > 0): ?>
+                    <span class="badge badge-vermelho"><?= count($qrsRejeitados) ?> rejeitado(s)</span>
+                <?php endif; ?>
+                <?php if (count($qrsExpirados) > 0): ?>
+                    <span class="badge badge-cinza"><?= count($qrsExpirados) ?> expirado(s)</span>
+                <?php endif; ?>
+            </span>
         </div>
+
+        <?php /* Tabs internas do card QR */ ?>
+        <div class="dash-qr-abas">
+            <?php if (!empty($qrsAguardando)): ?>
+            <div class="dash-qr-secao">
+                <div class="dash-qr-secao-titulo dash-qr-aguardando">⏳ Aguardando Confirmação</div>
+                <div class="tabela-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Vendedor</th>
+                                <th style="text-align:center">Tipo</th>
+                                <th style="text-align:center">Data Ref.</th>
+                                <th style="text-align:center">Expira em</th>
+                                <th style="text-align:center">Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($qrsAguardando as $qr): ?>
+                        <tr class="dash-tr-aguardando">
+                            <td><strong><?= esc($qr['vendedor']) ?></strong></td>
+                            <td style="text-align:center">
+                                <?= $qr['tipo'] === 'saida' ? '📤 Saída' : '📥 Retorno' ?>
+                            </td>
+                            <td style="text-align:center"><?= formatarData($qr['data_ref']) ?></td>
+                            <td style="text-align:center; font-size:13px; color:var(--cinza-texto)">
+                                <?= formatarDataHora($qr['expira_em']) ?>
+                            </td>
+                            <td style="text-align:center">
+                                <a href="<?= BASE_URL ?>/pages/<?= esc($qr['tipo']) ?>.php?etapa=reenviar&vid=<?= (int)$qr['vendedor_id'] ?>&data=<?= esc($qr['data_ref']) ?>"
+                                   class="btn btn-acento btn-pequeno">
+                                    📲 Reenviar QR
+                                </a>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <?php if (!empty($qrsRejeitados)): ?>
+            <div class="dash-qr-secao">
+                <div class="dash-qr-secao-titulo dash-qr-rejeitado">❌ Rejeitados pelo Vendedor</div>
+                <div class="tabela-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Vendedor</th>
+                                <th style="text-align:center">Tipo</th>
+                                <th style="text-align:center">Data Ref.</th>
+                                <th>Motivo da Rejeição</th>
+                                <th style="text-align:center">Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($qrsRejeitados as $qr): ?>
+                        <tr class="dash-tr-rejeitado">
+                            <td><strong><?= esc($qr['vendedor']) ?></strong></td>
+                            <td style="text-align:center">
+                                <?= $qr['tipo'] === 'saida' ? '📤 Saída' : '📥 Retorno' ?>
+                            </td>
+                            <td style="text-align:center"><?= formatarData($qr['data_ref']) ?></td>
+                            <td style="font-size:13px; color:var(--cinza-texto); font-style:italic">
+                                <?= $qr['rejeitado_motivo'] ? esc($qr['rejeitado_motivo']) : '—' ?>
+                            </td>
+                            <td style="text-align:center">
+                                <a href="<?= BASE_URL ?>/pages/<?= esc($qr['tipo']) ?>.php?etapa=corrigir&token=<?= esc($qr['token']) ?>"
+                                   class="btn btn-vermelho btn-pequeno">
+                                    ✏️ Corrigir
+                                </a>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <?php if (!empty($qrsExpirados)): ?>
+            <div class="dash-qr-secao">
+                <div class="dash-qr-secao-titulo dash-qr-expirado">
+                    🕒 Expirados sem Confirmação
+                    <span class="dash-qr-expirado-aviso">— O vendedor não escaneou o QR Code a tempo. Reregistre o movimento se necessário.</span>
+                </div>
+                <div class="tabela-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Vendedor</th>
+                                <th style="text-align:center">Tipo</th>
+                                <th style="text-align:center">Data Ref.</th>
+                                <th style="text-align:center">Expirou em</th>
+                                <th style="text-align:center">Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($qrsExpirados as $qr): ?>
+                        <tr class="dash-tr-expirado">
+                            <td><strong><?= esc($qr['vendedor']) ?></strong></td>
+                            <td style="text-align:center">
+                                <?= $qr['tipo'] === 'saida' ? '📤 Saída' : '📥 Retorno' ?>
+                            </td>
+                            <td style="text-align:center"><?= formatarData($qr['data_ref']) ?></td>
+                            <td style="text-align:center; font-size:13px; color:var(--cinza-texto)">
+                                <?= formatarDataHora($qr['expira_em']) ?>
+                            </td>
+                            <td style="text-align:center">
+                                <a href="<?= BASE_URL ?>/pages/<?= esc($qr['tipo']) ?>.php"
+                                   class="btn btn-secundario btn-pequeno">
+                                    🔁 Novo registro
+                                </a>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <?php endif; ?>
+
+        </div><!-- /.dash-qr-abas -->
     </div>
     <?php endif; ?>
 
-    <?php /* ── Painel de resumo por vendedor ─────────────────── */ ?>
+    <?php /* ── Gráfico: Movimentação dos últimos 7 dias (NOVO) ─────── */ ?>
+    <div class="card">
+        <div class="card-titulo">📈 Movimentação — Últimos 7 Dias</div>
+        <div class="dash-grafico-wrapper">
+            <canvas id="grafico-semana"
+                    class="dash-grafico-canvas"
+                    data-semana="<?= esc(json_encode($semana)) ?>"
+                    data-hoje="<?= $hoje ?>">
+            </canvas>
+            <div class="dash-grafico-legenda">
+                <span class="dash-leg-item">
+                    <span class="dash-leg-cor" style="background:var(--primaria)"></span> Saídas
+                </span>
+                <span class="dash-leg-item">
+                    <span class="dash-leg-cor" style="background:var(--acento)"></span> Retornos
+                </span>
+                <span class="dash-leg-item">
+                    <span class="dash-leg-cor" style="background:var(--verde)"></span> Vendas conf.
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <?php /* ── Painel de resumo por vendedor ─────────────────────── */ ?>
     <div class="card">
         <div class="card-titulo" style="display:flex; justify-content:space-between; align-items:center;">
             <span>📊 Resumo do Dia — <?= date('d/m/Y') ?></span>
@@ -276,7 +483,7 @@ $statusVenda   = verificarHorario('venda');
         <?php if (empty($vendedores)): ?>
             <div class="alerta alerta-info">
                 Nenhum vendedor cadastrado ainda.
-                <?php if (in_array($_SESSION['usuario_perfil'], ['supervisor','master'])): ?>
+                <?php if (in_array($_SESSION['usuario_perfil'], ['supervisor', 'master'])): ?>
                     <a href="<?= BASE_URL ?>/pages/cadastros.php">Cadastrar agora →</a>
                 <?php endif; ?>
             </div>
@@ -355,7 +562,7 @@ $statusVenda   = verificarHorario('venda');
                 <span class="legenda-bolinha" style="background:#fffbea"></span> Em aberto
             </span>
             <span class="legenda-item">
-                <span class="legenda-bolinha" style="background:#fff0f0"></span> Verificar (saldo negativo)
+                <span class="legenda-bolinha" style="background:#fff0f0; border:1px solid #f5c6cb"></span> Verificar (saldo negativo)
             </span>
             <span class="legenda-item">
                 <span class="legenda-bolinha" style="background:#f4f6fa; border:1px solid #ced4da"></span> Sem movimento
@@ -379,8 +586,138 @@ $statusVenda   = verificarHorario('venda');
 
 <script src="<?= BASE_URL ?>/assets/js/main.js"></script>
 <script>
-// Atualiza o painel automaticamente a cada 60 segundos
-setTimeout(function() { location.reload(); }, 60000);
+const BASE_URL = '<?= BASE_URL ?>';
+
+// ── Gráfico de movimentação semanal ─────────────────────────────
+(function () {
+    const canvas = document.getElementById('grafico-semana');
+    if (!canvas || !canvas.getContext) return;
+
+    const dados = JSON.parse(canvas.dataset.semana);
+    const hoje  = canvas.dataset.hoje;
+    const ctx   = canvas.getContext('2d');
+
+    // Dimensões responsivas
+    function desenhar() {
+        const W = canvas.parentElement.offsetWidth;
+        const H = 190;
+        canvas.width  = W;
+        canvas.height = H;
+
+        const PAD   = { top: 20, bottom: 44, left: 10, right: 10 };
+        const chartW = W - PAD.left - PAD.right;
+        const chartH = H - PAD.top  - PAD.bottom;
+
+        // Máximo para escala
+        const maxVal = Math.max(
+            1,
+            ...dados.flatMap(d => [d.saidas, d.retornos, d.vendas])
+        );
+
+        const CORES = ['#2B2B88', '#0A7BC4', '#28A745'];
+        const TIPOS = ['saidas', 'retornos', 'vendas'];
+        const diaW  = chartW / dados.length;
+        const barW  = Math.max(5, Math.min(14, diaW / 5));
+        const gap   = 2;
+        const grupoW = barW * 3 + gap * 2;
+
+        // Linha base
+        ctx.clearRect(0, 0, W, H);
+        ctx.strokeStyle = '#CED4DA';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(PAD.left, H - PAD.bottom);
+        ctx.lineTo(W - PAD.right, H - PAD.bottom);
+        ctx.stroke();
+
+        // Linhas de grade horizontais (3 níveis)
+        ctx.setLineDash([3, 4]);
+        ctx.strokeStyle = '#e8eaf0';
+        [0.25, 0.5, 0.75].forEach(frac => {
+            const y = PAD.top + chartH * (1 - frac);
+            ctx.beginPath();
+            ctx.moveTo(PAD.left, y);
+            ctx.lineTo(W - PAD.right, y);
+            ctx.stroke();
+
+            // Valor na grade
+            const val = Math.round(maxVal * frac);
+            ctx.setLineDash([]);
+            ctx.fillStyle = '#aaa';
+            ctx.font = '9px Arial, sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText(val, PAD.left + 22, y + 3);
+            ctx.setLineDash([3, 4]);
+        });
+        ctx.setLineDash([]);
+
+        const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+        dados.forEach(function (d, i) {
+            const cx = PAD.left + diaW * i + diaW / 2;
+            const eHoje = (d.data === hoje);
+
+            // Destaque do dia atual
+            if (eHoje) {
+                ctx.fillStyle = 'rgba(43,43,136,0.05)';
+                ctx.fillRect(PAD.left + diaW * i, PAD.top, diaW, chartH + 1);
+            }
+
+            // Barras
+            TIPOS.forEach(function (tipo, j) {
+                const val  = d[tipo];
+                const barH = val > 0 ? Math.max(3, (val / maxVal) * chartH) : 0;
+                const x    = cx - grupoW / 2 + j * (barW + gap);
+                const y    = H - PAD.bottom - barH;
+
+                ctx.fillStyle = CORES[j];
+                ctx.globalAlpha = eHoje ? 1 : 0.72;
+                ctx.fillRect(x, y, barW, barH);
+                ctx.globalAlpha = 1;
+
+                // Valor no topo da barra (apenas se barH > 12)
+                if (barH > 16 && val > 0) {
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 9px Arial, sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(val, x + barW / 2, y + 10);
+                }
+            });
+
+            // Rótulo do dia
+            const dataObj = new Date(d.data + 'T00:00:00');
+            const nomeDia = diasSemana[dataObj.getDay()];
+            const diaMes  = d.data.slice(8) + '/' + d.data.slice(5, 7);
+
+            ctx.fillStyle = eHoje ? '#2B2B88' : '#6C757D';
+            ctx.font = eHoje ? 'bold 10px Arial, sans-serif' : '10px Arial, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(nomeDia, cx, H - PAD.bottom + 14);
+            ctx.font = '9px Arial, sans-serif';
+            ctx.fillStyle = '#aaa';
+            ctx.fillText(diaMes, cx, H - PAD.bottom + 26);
+
+            // Marcador "hoje"
+            if (eHoje) {
+                ctx.fillStyle = '#2B2B88';
+                ctx.font = 'bold 9px Arial, sans-serif';
+                ctx.fillText('▲ hoje', cx, H - PAD.bottom + 38);
+            }
+        });
+    }
+
+    desenhar();
+
+    // Redesenha ao redimensionar a janela
+    let debounce;
+    window.addEventListener('resize', function () {
+        clearTimeout(debounce);
+        debounce = setTimeout(desenhar, 120);
+    });
+})();
+
+// ── Atualização automática a cada 60 segundos ───────────────────
+setTimeout(function () { location.reload(); }, 60000);
 </script>
 
 </body>

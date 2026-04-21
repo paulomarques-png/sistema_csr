@@ -8,16 +8,24 @@ require_once __DIR__ . '/includes/functions.php';
 if (isset($_GET['logout'])) {
     encerrarSessao('Você saiu do sistema.');
 }
-// Se já estiver logado, redireciona para o dashboard
-if (isset($_SESSION['usuario_id'])) {
-    header('Location: ' . BASE_URL . '/pages/dashboard.php');
+
+// ── Helper: redireciona para a página correta por perfil ─────────
+function redirecionarPorPerfil(): void {
+    $destino = ($_SESSION['usuario_perfil'] === 'vendedor')
+        ? BASE_URL . '/pages/vendedor_app.php'
+        : BASE_URL . '/pages/dashboard.php';
+    header('Location: ' . $destino);
     exit;
+}
+
+// Se já estiver logado, redireciona para a página correta
+if (isset($_SESSION['usuario_id'])) {
+    redirecionarPorPerfil();
 }
 
 $erro    = '';
 $sucesso = '';
 
-// Mensagem de sessão expirada ou outras notificações
 if (!empty($_GET['msg'])) {
     $sucesso = esc($_GET['msg']);
 }
@@ -39,8 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $resultado = fazerLogin($nome, $senha);
 
         if ($resultado['ok']) {
-            header('Location: ' . BASE_URL . '/pages/dashboard.php');
-            exit;
+            redirecionarPorPerfil(); // ✅ usa o perfil gravado na sessão
         } else {
             $erro = $resultado['msg'];
         }

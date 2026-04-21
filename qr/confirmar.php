@@ -33,7 +33,7 @@ if ($statusAtual === 'pendente') {
     $stmtI  = $pdo->prepare("
         SELECT codigo, produto, quantidade
         FROM $tabela
-        WHERE vendedor_id = :vid AND data = :data AND rejeitado = 0
+        WHERE vendedor_id = :vid AND data = :data AND confirmado = 0 AND rejeitado = 0
         ORDER BY id ASC
     ");
     $stmtI->execute([':vid' => $tk['vendedor_id'], ':data' => $tk['data_ref']]);
