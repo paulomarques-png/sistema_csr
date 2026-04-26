@@ -7,7 +7,7 @@
 // ── Informações do sistema ──────────────────────────────
 define('SISTEMA_NOME',    'Controle de Carga');
 define('SISTEMA_VERSAO',  '1.0');
-define('BASE_URL',        'http://192.168.0.102/sistema_csr'); // Troque em produção
+define('BASE_URL',        'http://192.168.0.101/sistema_csr'); // Troque em produção
 
 // ── Horários de operação ────────────────────────────────
 define('HORA_SAIDA_INICIO',   '00:00');

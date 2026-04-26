@@ -68,11 +68,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="login-box">
 
         <?php
-        $logoPath = __DIR__ . '/assets/img/logo.png';
-        $logoUrl  = BASE_URL . '/assets/img/logo.png';
+        $logoPath = __DIR__ . '/assets/img/logo-original.png';
+        $logoUrl  = BASE_URL . '/assets/img/logo-original.png';
         if (file_exists($logoPath)):
         ?>
-            <img src="<?= $logoUrl ?>" alt="Logo" style="max-height:70px; margin-bottom:16px;">
+            <img src="<?= $logoUrl ?>" alt="Logo" style="max-height:200px; margin-bottom:16px;">
         <?php else: ?>
             <div style="font-size:48px; margin-bottom:8px;">📦</div>
         <?php endif; ?>

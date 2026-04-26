@@ -206,31 +206,33 @@ $statusVenda   = verificarHorario('venda');
 <main>
 
     <?php /* ── Alerta de pendências de dias anteriores ─────────────── */ ?>
-    <?php if (!empty($pendencias)): ?>
-    <div class="alerta alerta-aviso dash-alerta-pendencias">
-        <span class="dash-alerta-icone">⚠️</span>
-        <div class="dash-alerta-corpo">
-            <strong><?= count($pendencias) ?> pendência(s) de dias anteriores:</strong>
-            <ul class="dash-pendencias-lista">
-                <?php foreach ($pendencias as $p):
-                    $urlRelatorio = BASE_URL . '/pages/relatorios.php'
-                        . '?data_inicio=' . urlencode($p['data'])
-                        . '&data_fim='    . urlencode($p['data'])
-                        . '&vendedor_id=' . urlencode($p['vendedor_id']);
-                ?>
-                    <li>
-                        <strong><?= esc($p['nome']) ?></strong>
-                        — <?= formatarData($p['data']) ?>
-                        — Saldo: <strong><?= $p['saldo'] ?></strong> itens em aberto
-                        <a href="<?= $urlRelatorio ?>" class="dash-pendencia-link" title="Ver relatório deste dia">
-                            📊 Ver relatório →
-                        </a>
-                    </li>
-                <?php endforeach; ?>
-            </ul>
+    <?php if (in_array($_SESSION['usuario_perfil'], ['admin', 'supervisor', 'master'])): ?>
+        <?php if (!empty($pendencias)): ?>
+        <div class="alerta alerta-aviso dash-alerta-pendencias">
+            <span class="dash-alerta-icone">⚠️</span>
+            <div class="dash-alerta-corpo">
+                <strong><?= count($pendencias) ?> pendência(s) de dias anteriores:</strong>
+                <ul class="dash-pendencias-lista">
+                    <?php foreach ($pendencias as $p):
+                        $urlRelatorio = BASE_URL . '/pages/relatorios.php'
+                            . '?data_inicio=' . urlencode($p['data'])
+                            . '&data_fim='    . urlencode($p['data'])
+                            . '&vendedor_id=' . urlencode($p['vendedor_id']);
+                    ?>
+                        <li>
+                            <strong><?= esc($p['nome']) ?></strong>
+                            — <?= formatarData($p['data']) ?>
+                            — Saldo: <strong><?= $p['saldo'] ?></strong> itens em aberto
+                            <a href="<?= $urlRelatorio ?>" class="dash-pendencia-link" title="Ver relatório deste dia">
+                                📊 Ver relatório →
+                            </a>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
         </div>
-    </div>
-    <?php endif; ?>
+        <?php endif; ?>
+    <?php endif; ?>    
 
     <?php /* ── Banner de status de horário ─────────────────────────── */ ?>
     <div class="banners-horario">

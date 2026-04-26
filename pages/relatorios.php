@@ -344,11 +344,14 @@ function classeSaldo(int $saldo): string {
         <div class="stat-label">✅ Total Vendidos</div>
     </div>
     <?php
-        $corSaldo = $g_saldo === 0 ? 'var(--verde)' : ($g_saldo > 0 ? 'var(--amarelo)' : 'var(--vermelho)');
+        $g_negativos  = count(array_filter($dados, fn($v) => $v['tem_movimento'] && $v['saldo'] < 0));
+        $corPendencia = $g_negativos > 0 ? 'var(--vermelho)' : ($g_pend > 0 ? 'var(--amarelo)' : 'var(--verde)');
+        $iconePend    = $g_negativos > 0 ? '🚨' : ($g_pend > 0 ? '⚠️' : '✅');
+        $labelPend    = $g_negativos > 0 ? 'com saldo negativo' : ($g_pend > 0 ? 'com saldo em aberto' : 'Todos zerados');
     ?>
-    <div class="card-stat" style="border-left-color:<?= $corSaldo ?>">
-        <div class="stat-num" style="color:<?= $corSaldo ?>"><?= $g_saldo ?></div>
-        <div class="stat-label">⚖️ Saldo Geral</div>
+    <div class="card-stat" style="border-left-color:<?= $corPendencia ?>">
+        <div class="stat-num" style="color:<?= $corPendencia ?>"><?= $g_pend ?></div>
+        <div class="stat-label"><?= $iconePend ?> <?= $labelPend ?></div>
     </div>
 </div>
 
