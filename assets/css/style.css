@@ -1075,20 +1075,37 @@ tr.audit-linha-aviso:hover td { background: #fef3c7; }
 .print-header { display: none; }
 
 @media print {
+    /* Oculta tudo desnecessário */
+    .site-header, .site-nav, footer,
+    .rel-filtros, .dd-wrap, .btn, .btn-pequeno,
+    .grid-stats, .alerta, .page-top,
+    .legenda-cores, .card-titulo,
+    .col-acao, .linha-total { display: none !important; }
+
+    /* Cabeçalho centralizado */
     .print-header {
         display: block;
         text-align: center;
-        padding: 12px;
-        margin-bottom: 16px;
-        border-bottom: 2px solid #333;
-        font-size: 14px;
     }
-    .site-header, .site-nav, footer,
-    .rel-filtros, .dd-wrap, .btn,
-    .btn-pequeno { display: none !important; }
-    .linha-detalhe { display: table-row !important; }
+
+    /* Oculta o card wrapper mas mantém a tabela */
+    .card { box-shadow: none; padding: 0; margin: 0; }
+
+    /* Cabeçalho da tabela só aparece se tiver linhas visíveis */
+    thead, tr[id^="row-"] { display: none; }
+
+    /* Linhas de detalhe expandidas */
+    .linha-detalhe { display: table-row !important; page-break-inside: avoid; }
     .detalhe-inner { background: white; }
-    .page-top { background: none; color: #000; padding: 8px 0; }
+
+    /* Fundo cinza claro na linha do vendedor */
+    tr[id^="row-"] td { background: #f4f6fa !important; }
+
+    /* Quebra de página por vendedor — sem quebra antes do primeiro */
+    tr[id^="detalhe-"] { page-break-after: always; }
+    tr[id^="detalhe-"]:first-child { page-break-before: avoid; }
+
+    .detalhe-inner { border: 1px solid #0A7BC4 !important; }
 }
 
 /* ================================================================
@@ -1676,4 +1693,73 @@ tr.audit-linha-aviso:hover td { background: #fef3c7; }
         left: 12px;
         max-width: none;
     }
+}
+
+/* ================================================================
+   LANÇAMENTO RETROATIVO
+   ================================================================ */
+
+/* ── Trigger — botão discreto com ícone de calendário+cadeado ─── */
+.retro-trigger {
+    margin-bottom: 18px;
+}
+.retro-trigger-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: 1.5px dashed var(--cinza);
+    color: var(--cinza-texto);
+    padding: 6px 14px;
+    border-radius: var(--raio);
+    font-size: 13px;
+    cursor: pointer;
+    transition: border-color .2s, color .2s, background .2s;
+}
+.retro-trigger-btn:hover {
+    border-color: var(--amarelo);
+    color: #856404;
+    background: #fffbea;
+}
+
+/* ── Campos retroativos — ocultos até autorização ───────────────── */
+.retro-campos {
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    transform: translateY(-8px);
+    transition: max-height .4s ease, opacity .35s ease, transform .35s ease;
+    margin-bottom: 0;
+}
+.retro-campos--visivel {
+    max-height: 300px;
+    opacity: 1;
+    transform: translateY(0);
+    margin-bottom: 18px;
+}
+
+/* ── Banner de autorizado ────────────────────────────────────────── */
+.retro-autorizado-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #f0fff4;
+    border: 1.5px solid #c3e6cb;
+    border-radius: var(--raio);
+    padding: 10px 14px;
+    font-size: 13px;
+    color: #155724;
+    margin-bottom: 14px;
+}
+
+/* ── Destaque no log de auditoria ───────────────────────────────── */
+tr.audit-linha-retroativa td {
+    background: #fff8e1;
+}
+tr.audit-linha-retroativa:hover td {
+    background: #fff3cd;
+}
+.audit-badge-retroativa {
+    background: #fff3cd;
+    color: #856404;
 }

@@ -18,12 +18,17 @@ $bloqueado = ($statusHorario === 'bloqueado'
 // ── PROCESSAMENTO DO FORMULÁRIO (POST) ──────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$bloqueado) {
 
-    $vendedorId      = (int)($_POST['vendedor_id']       ?? 0);
-    $codigos         = $_POST['codigo']         ?? [];
-    $produtosArr     = $_POST['produto']        ?? [];
-    $quantidades     = $_POST['quantidade']     ?? [];
-    $obs             = trim($_POST['obs']       ?? '');
-    $tokenCorrigindo = trim($_POST['token_corrigindo'] ?? '');
+    $vendedorId         = (int)($_POST['vendedor_id']              ?? 0);
+    $codigos            = $_POST['codigo']                         ?? [];
+    $produtosArr        = $_POST['produto']                        ?? [];
+    $quantidades        = $_POST['quantidade']                     ?? [];
+    $obs                = trim($_POST['obs']                       ?? '');
+    $tokenCorrigindo    = trim($_POST['token_corrigindo']          ?? '');
+    $dataRetroativo     = trim($_POST['data_retroativo']           ?? '');
+    $justificativaRetro = trim($_POST['justificativa_retroativo']  ?? '');
+    $autorizadoPorId    = (int)($_POST['autorizado_por_id']        ?? 0);
+    $autorizadoPorNome  = trim($_POST['autorizado_por_nome']       ?? '');
+    $isRetroativo       = false;
 
     if ($vendedorId <= 0) {
         $erro = 'Selecione um vendedor.';
@@ -57,78 +62,109 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$bloqueado) {
             $nomeVendedor = $vendedor['nome'];
             $obsGravar    = $obs . (modoManutencaoAtivo() ? ' [MANUTENCAO]' : '');
 
-            // Se é correção: mantém a data original do registro rejeitado
+            // Correção de registro rejeitado — mantém data original do token
             if (!empty($tokenCorrigindo)) {
-                $stmtTkOld = $pdo->prepare(
-                    "SELECT vendedor_id, data_ref FROM qr_tokens WHERE token = :t"
-                );
+                $stmtTkOld = $pdo->prepare("SELECT vendedor_id, data_ref FROM qr_tokens WHERE token = :t");
                 $stmtTkOld->execute([':t' => $tokenCorrigindo]);
                 $tkOld = $stmtTkOld->fetch();
                 if ($tkOld) {
                     $hoje = $tkOld['data_ref'];
                 }
+
+            // Lançamento retroativo — requer autorização de supervisor
+            } elseif (!empty($dataRetroativo)
+                && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dataRetroativo)
+                && $dataRetroativo !== date('Y-m-d')
+            ) {
+                if ($dataRetroativo > date('Y-m-d')) {
+                    $erro = 'Não é permitido lançamento em data futura.';
+                } elseif (empty($justificativaRetro)) {
+                    $erro = 'Justificativa obrigatória para lançamento retroativo.';
+                } elseif ($autorizadoPorId <= 0 || empty($autorizadoPorNome)) {
+                    $erro = 'Autorização de supervisor necessária para lançamento retroativo.';
+                } else {
+                    $hoje         = $dataRetroativo;
+                    $isRetroativo = true;
+                    $obsGravar   .= " [RETROATIVO | Autorizado: $autorizadoPorNome | $justificativaRetro]";
+                }
             }
 
-            // SEMPRE apaga registros não confirmados do mesmo vendedor+data
-            $pdo->prepare("
-                DELETE FROM reg_saidas
-                WHERE vendedor_id = :vid AND data = :data AND confirmado = 0
-            ")->execute([':vid' => $vendedorId, ':data' => $hoje]);
+            if (empty($erro)) {
+                // Apaga registros não confirmados do mesmo vendedor+data
+                $pdo->prepare("
+                    DELETE FROM reg_saidas
+                    WHERE vendedor_id = :vid AND data = :data AND confirmado = 0
+                ")->execute([':vid' => $vendedorId, ':data' => $hoje]);
 
-            // Marca tokens pendentes/rejeitados anteriores como usados
-            $pdo->prepare("
-                UPDATE qr_tokens SET usado = 1
-                WHERE vendedor_id = :vid AND data_ref = :data
-                  AND tipo = 'saida' AND usado = 0
-            ")->execute([':vid' => $vendedorId, ':data' => $hoje]);
+                // Invalida tokens pendentes anteriores
+                $pdo->prepare("
+                    UPDATE qr_tokens SET usado = 1
+                    WHERE vendedor_id = :vid AND data_ref = :data
+                      AND tipo = 'saida' AND usado = 0
+                ")->execute([':vid' => $vendedorId, ':data' => $hoje]);
 
-            // Insere os novos itens
-            $stmtIns = $pdo->prepare("
-                INSERT INTO reg_saidas
-                    (data, hora, vendedor_id, vendedor, codigo, produto, quantidade, obs)
-                VALUES
-                    (:data, :hora, :vid, :vendedor, :codigo, :produto, :quantidade, :obs)
-            ");
-            foreach ($itens as $item) {
-                $stmtIns->execute([
-                    ':data'       => $hoje,
-                    ':hora'       => $agora,
-                    ':vid'        => $vendedorId,
-                    ':vendedor'   => $nomeVendedor,
-                    ':codigo'     => $item['codigo'],
-                    ':produto'    => $item['produto'],
-                    ':quantidade' => $item['quantidade'],
-                    ':obs'        => $obsGravar,
+                // Insere os novos itens
+                $stmtIns = $pdo->prepare("
+                    INSERT INTO reg_saidas
+                        (data, hora, vendedor_id, vendedor, codigo, produto, quantidade, obs)
+                    VALUES
+                        (:data, :hora, :vid, :vendedor, :codigo, :produto, :quantidade, :obs)
+                ");
+                foreach ($itens as $item) {
+                    $stmtIns->execute([
+                        ':data'       => $hoje,
+                        ':hora'       => $agora,
+                        ':vid'        => $vendedorId,
+                        ':vendedor'   => $nomeVendedor,
+                        ':codigo'     => $item['codigo'],
+                        ':produto'    => $item['produto'],
+                        ':quantidade' => $item['quantidade'],
+                        ':obs'        => $obsGravar,
+                    ]);
+                }
+
+                // Gera novo token QR
+                $token  = bin2hex(random_bytes(32));
+                $expira = date('Y-m-d H:i:s', time() + QR_EXPIRACAO_HORAS * 3600);
+
+                $pdo->prepare("
+                    INSERT INTO qr_tokens (token, tipo, vendedor_id, data_ref, expira_em)
+                    VALUES (:token, 'saida', :vid, :data, :expira)
+                ")->execute([
+                    ':token'  => $token,
+                    ':vid'    => $vendedorId,
+                    ':data'   => $hoje,
+                    ':expira' => $expira,
                 ]);
+
+                // Registra no log de auditoria
+                if ($isRetroativo) {
+                    registrarLog(
+                        'SAIDA_RETROATIVA',
+                        "Vendedor: $nomeVendedor | " . count($itens) . " item(ns)"
+                        . " | Data ref: $hoje | Autorizado por: $autorizadoPorNome (id:$autorizadoPorId)"
+                        . " | Justificativa: $justificativaRetro",
+                        obterIP()
+                    );
+                } else {
+                    $acao = empty($tokenCorrigindo) ? 'SAIDA' : 'SAIDA_CORRIGIDA';
+                    registrarLog($acao, "Vendedor: $nomeVendedor | " . count($itens) . " item(ns)", obterIP());
+                }
+
+                $_SESSION['qr_saida'] = [
+                    'token'          => $token,
+                    'vendedor'       => $nomeVendedor,
+                    'data'           => $hoje,
+                    'itens'          => $itens,
+                    'expira'         => $expira,
+                    'retroativo'     => $isRetroativo,
+                    'autorizado_por' => $isRetroativo ? $autorizadoPorNome : null,
+                    'justificativa'  => $isRetroativo ? $justificativaRetro : null,
+                ];
+
+                header('Location: ' . BASE_URL . '/pages/saida.php?etapa=qr');
+                exit;
             }
-
-            // Gera novo token QR
-            $token  = bin2hex(random_bytes(32));
-            $expira = date('Y-m-d H:i:s', time() + QR_EXPIRACAO_HORAS * 3600);
-
-            $pdo->prepare("
-                INSERT INTO qr_tokens (token, tipo, vendedor_id, data_ref, expira_em)
-                VALUES (:token, 'saida', :vid, :data, :expira)
-            ")->execute([
-                ':token'  => $token,
-                ':vid'    => $vendedorId,
-                ':data'   => $hoje,
-                ':expira' => $expira,
-            ]);
-
-            $acao = empty($tokenCorrigindo) ? 'SAIDA' : 'SAIDA_CORRIGIDA';
-            registrarLog($acao, "Vendedor: $nomeVendedor | " . count($itens) . " item(ns)", obterIP());
-
-            $_SESSION['qr_saida'] = [
-                'token'    => $token,
-                'vendedor' => $nomeVendedor,
-                'data'     => $hoje,
-                'itens'    => $itens,
-                'expira'   => $expira,
-            ];
-
-            header('Location: ' . BASE_URL . '/pages/saida.php?etapa=qr');
-            exit;
         }
     }
 }
@@ -151,7 +187,6 @@ if ($etapa === 'reenviar') {
         $stmtVRe->execute([':id' => $vidRe]);
         $nomeRe = $stmtVRe->fetchColumn();
 
-        // Invalida tokens anteriores
         $pdo->prepare("
             UPDATE qr_tokens SET usado = 1
             WHERE vendedor_id = :vid AND data_ref = :data AND tipo = 'saida' AND usado = 0
@@ -168,34 +203,32 @@ if ($etapa === 'reenviar') {
         registrarLog('QR_REENVIADO', "Saída reaberta | Vendedor ID: $vidRe | Data: $dataRe", obterIP());
 
         $_SESSION['qr_saida'] = [
-            'token'    => $token,
-            'vendedor' => $nomeRe,
-            'data'     => $dataRe,
-            'itens'    => array_map(fn($i) => [
+            'token'      => $token,
+            'vendedor'   => $nomeRe,
+            'data'       => $dataRe,
+            'itens'      => array_map(fn($i) => [
                 'codigo'     => $i['codigo'],
                 'produto'    => $i['produto'],
                 'quantidade' => $i['quantidade'],
             ], $itensRe),
-            'expira'   => $expira,
+            'expira'     => $expira,
+            'retroativo' => false,
         ];
 
         header('Location: ' . BASE_URL . '/pages/saida.php?etapa=qr');
         exit;
     }
-    $etapa = 'form'; // sem itens, volta para o form vazio
+    $etapa = 'form';
 }
 
 // ── Etapa: CORRIGIR registro rejeitado ───────────────────────────
-$tkCorr      = null;
-$itensCorr   = [];
-$vendCorr    = '';
+$tkCorr       = null;
+$itensCorr    = [];
+$vendCorr     = '';
 $tokenCorrVal = trim($_GET['token'] ?? '');
 
 if ($etapa === 'corrigir' && $tokenCorrVal) {
-    // Aceita token rejeitado mesmo que usado=1 (pode ter sido marcado pelo UPDATE)
-    $stmtTk = $pdo->prepare("
-        SELECT * FROM qr_tokens WHERE token = :t AND rejeitado = 1
-    ");
+    $stmtTk = $pdo->prepare("SELECT * FROM qr_tokens WHERE token = :t AND rejeitado = 1");
     $stmtTk->execute([':t' => $tokenCorrVal]);
     $tkCorr = $stmtTk->fetch();
 
@@ -204,7 +237,6 @@ if ($etapa === 'corrigir' && $tokenCorrVal) {
         exit;
     }
 
-    // Tenta buscar itens não confirmados da data original
     $stmtIt = $pdo->prepare("
         SELECT codigo, produto, quantidade FROM reg_saidas
         WHERE vendedor_id = :vid AND data = :data AND confirmado = 0
@@ -213,8 +245,6 @@ if ($etapa === 'corrigir' && $tokenCorrVal) {
     $stmtIt->execute([':vid' => $tkCorr['vendedor_id'], ':data' => $tkCorr['data_ref']]);
     $itensCorr = $stmtIt->fetchAll();
 
-    // Se não encontrou (itens foram apagados em testes), busca os confirmados do dia
-    // para pelo menos mostrar o histórico como referência
     if (empty($itensCorr)) {
         $stmtIt2 = $pdo->prepare("
             SELECT codigo, produto, quantidade FROM reg_saidas
@@ -273,6 +303,14 @@ if ($etapa === 'qr') {
 <?php elseif ($etapa === 'qr' && $qrData): ?>
     <div class="card" style="max-width:700px; margin:0 auto">
         <div class="card-titulo">📤 Saída Registrada — Aguardando Confirmação</div>
+
+        <?php if ($qrData['retroativo'] ?? false): ?>
+        <div class="alerta alerta-aviso" style="margin-bottom:16px; font-size:13px">
+            🕐 <strong>Registro retroativo</strong> — Data de referência: <?= formatarData($qrData['data']) ?><br>
+            <span style="opacity:.8">Autorizado por: <strong><?= esc($qrData['autorizado_por']) ?></strong>
+            — <?= esc($qrData['justificativa']) ?></span>
+        </div>
+        <?php endif; ?>
 
         <div class="qr-layout">
             <div class="qr-resumo">
@@ -421,7 +459,9 @@ if ($etapa === 'qr') {
         <?php endif; ?>
 
         <form method="post" id="form-saida" autocomplete="off">
-            <input type="hidden" name="token_corrigindo" value="">
+            <input type="hidden" name="token_corrigindo"         value="">
+            <input type="hidden" name="autorizado_por_id"        id="autorizado-por-id"   value="">
+            <input type="hidden" name="autorizado_por_nome"      id="autorizado-por-nome" value="">
 
             <div class="grupo-campo" style="max-width:400px">
                 <label>Vendedor <span style="color:red">*</span></label>
@@ -434,6 +474,32 @@ if ($etapa === 'qr') {
                     </option>
                     <?php endforeach; ?>
                 </select>
+            </div>
+
+            <?php /* ── Trigger de lançamento retroativo ──────── */ ?>
+            <div class="retro-trigger" id="retro-trigger">
+                <button type="button" class="retro-trigger-btn" onclick="abrirModalRetroativo()"
+                        title="Registrar em data anterior — requer autorização de supervisor">
+                    📅🔒 <span>Lançamento retroativo</span>
+                </button>
+            </div>
+
+            <?php /* ── Campos retroativo (revelados após auth) ── */ ?>
+            <div id="retro-campos" class="retro-campos">
+                <div class="retro-autorizado-banner">
+                    ✅ Autorizado por: <strong id="retro-autorizado-nome"></strong>
+                </div>
+                <div class="grupo-campo" style="max-width:220px">
+                    <label>Data do registro <span style="color:red">*</span></label>
+                    <input type="date" name="data_retroativo" id="data-retroativo" class="campo"
+                           max="<?= date('Y-m-d', strtotime('-1 day')) ?>">
+                    <small style="color:var(--cinza-texto)">Somente datas anteriores a hoje.</small>
+                </div>
+                <div class="grupo-campo" style="max-width:500px">
+                    <label>Justificativa <span style="color:red">*</span></label>
+                    <input type="text" name="justificativa_retroativo" class="campo"
+                           placeholder="Ex: Saída não registrada no dia correto" maxlength="300">
+                </div>
             </div>
 
             <div style="margin-bottom:8px">
@@ -469,6 +535,38 @@ if ($etapa === 'qr') {
     </div>
 <?php endif; ?>
 
+<?php /* ── Modal de autorização retroativa ────────────────────── */ ?>
+<div id="modal-retroativo" class="modal" style="display:none">
+    <div class="modal-box">
+        <h3>📅🔒 Autorizar Lançamento Retroativo</h3>
+        <p style="font-size:13px; color:var(--cinza-texto); margin-bottom:16px; line-height:1.5">
+            Esta ação requer autorização de um <strong>supervisor</strong> ou <strong>master</strong>.<br>
+            O responsável será identificado e registrado no log de auditoria.
+        </p>
+        <div id="retro-modal-erro" class="alerta alerta-erro" style="display:none"></div>
+        <div class="grupo-campo">
+            <label>Usuário do supervisor</label>
+            <input type="text" id="retro-login" class="campo"
+                   placeholder="Login do supervisor" autocomplete="off">
+        </div>
+        <div class="grupo-campo">
+            <label>Senha</label>
+            <input type="password" id="retro-senha" class="campo" placeholder="Senha"
+                   onkeydown="if(event.key==='Enter') validarSupervisor()">
+        </div>
+        <div class="modal-botoes">
+            <button type="button" class="btn btn-primario" id="btn-autorizar"
+                    onclick="validarSupervisor()">
+                🔓 Autorizar
+            </button>
+            <button type="button" class="btn btn-secundario"
+                    onclick="fecharModal('modal-retroativo')">
+                Cancelar
+            </button>
+        </div>
+    </div>
+</div>
+
 </main>
 
 <footer>
@@ -483,7 +581,6 @@ if ($etapa === 'qr') {
 const BASE_URL = '<?= BASE_URL ?>';
 
 <?php if ($etapa === 'qr' && $qrData): ?>
-// ── Polling: verifica status da confirmação ──────────────────────
 const TOKEN_QR = '<?= $qrData['token'] ?>';
 
 function verificarConfirmacao() {
@@ -494,7 +591,6 @@ function verificarConfirmacao() {
                 clearInterval(pollingInterval);
                 document.getElementById('status-aguardando').style.display = 'none';
                 document.getElementById('status-confirmado').style.display = 'block';
-
             } else if (data.rejeitado) {
                 clearInterval(pollingInterval);
                 document.getElementById('status-aguardando').style.display = 'none';
@@ -504,7 +600,6 @@ function verificarConfirmacao() {
                 }
                 document.getElementById('link-corrigir').href =
                     BASE_URL + '/pages/saida.php?etapa=corrigir&token=<?= $qrData['token'] ?>';
-
             } else if (data.expirado) {
                 clearInterval(pollingInterval);
                 document.getElementById('status-aguardando').style.display = 'none';
@@ -588,9 +683,9 @@ function buscarProduto(input) {
 }
 
 function selecionarProduto(linha, produto) {
-    linha.querySelector('.campo-busca').value       = produto.codigo + ' — ' + produto.descricao;
-    linha.querySelector('[name="produto[]"]').value  = produto.descricao;
-    linha.querySelector('[name="codigo[]"]').value   = produto.codigo;
+    linha.querySelector('.campo-busca').value      = produto.codigo + ' — ' + produto.descricao;
+    linha.querySelector('[name="produto[]"]').value = produto.descricao;
+    linha.querySelector('[name="codigo[]"]').value  = produto.codigo;
     linha.querySelector('.autocomplete-lista').style.display = 'none';
     linha.querySelector('[name="quantidade[]"]').focus();
 }
@@ -610,11 +705,85 @@ document.getElementById('form-saida').addEventListener('submit', function(e) {
     if (!valido) {
         e.preventDefault();
         alert('Adicione pelo menos um produto com código e quantidade válidos.');
+        return;
+    }
+    // Valida campos retroativos se visíveis
+    const camposRetro = document.getElementById('retro-campos');
+    if (camposRetro.classList.contains('retro-campos--visivel')) {
+        const dataRetro = document.getElementById('data-retroativo').value;
+        const just = document.querySelector('[name="justificativa_retroativo"]').value.trim();
+        if (!dataRetro) { e.preventDefault(); alert('Informe a data do registro retroativo.'); return; }
+        if (!just)      { e.preventDefault(); alert('Justificativa obrigatória para lançamento retroativo.'); return; }
     }
 });
 
+// ── Lançamento retroativo ─────────────────────────────────────────
+function abrirModalRetroativo() {
+    document.getElementById('retro-modal-erro').style.display = 'none';
+    document.getElementById('retro-login').value = '';
+    document.getElementById('retro-senha').value = '';
+    abrirModal('modal-retroativo');
+    setTimeout(() => document.getElementById('retro-login').focus(), 100);
+}
+
+function validarSupervisor() {
+    const login  = document.getElementById('retro-login').value.trim();
+    const senha  = document.getElementById('retro-senha').value;
+    const erroEl = document.getElementById('retro-modal-erro');
+    const btnEl  = document.getElementById('btn-autorizar');
+
+    if (!login || !senha) {
+        erroEl.textContent = 'Preencha usuário e senha do supervisor.';
+        erroEl.style.display = 'block';
+        return;
+    }
+
+    btnEl.textContent = '⏳ Validando...';
+    btnEl.disabled    = true;
+
+    fetch(BASE_URL + '/api/validar_supervisor.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'login=' + encodeURIComponent(login) + '&senha=' + encodeURIComponent(senha),
+        credentials: 'same-origin'
+    })
+    .then(r => r.json())
+    .then(data => {
+        btnEl.textContent = '🔓 Autorizar';
+        btnEl.disabled    = false;
+
+        if (data.ok) {
+            fecharModal('modal-retroativo');
+
+            // Preenche campos ocultos
+            document.getElementById('autorizado-por-id').value   = data.id;
+            document.getElementById('autorizado-por-nome').value = data.nome;
+            document.getElementById('retro-autorizado-nome').textContent =
+                data.nome + ' (' + data.perfil + ')';
+
+            // Revela seção com animação
+            const campos = document.getElementById('retro-campos');
+            campos.classList.add('retro-campos--visivel');
+
+            // Esconde o trigger
+            document.getElementById('retro-trigger').style.display = 'none';
+
+            // Foca na data
+            setTimeout(() => document.getElementById('data-retroativo').focus(), 420);
+        } else {
+            erroEl.textContent   = data.msg || 'Credenciais inválidas.';
+            erroEl.style.display = 'block';
+        }
+    })
+    .catch(() => {
+        btnEl.textContent = '🔓 Autorizar';
+        btnEl.disabled    = false;
+        erroEl.textContent   = 'Erro de conexão. Tente novamente.';
+        erroEl.style.display = 'block';
+    });
+}
+
 <?php if ($etapa === 'corrigir' && !empty($itensCorr)): ?>
-// Pré-carrega itens do registro rejeitado
 const itensPre = <?= json_encode(array_values($itensCorr)) ?>;
 itensPre.forEach(item => {
     adicionarLinha();
