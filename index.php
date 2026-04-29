@@ -124,7 +124,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </button>
         </form>
 
-        <footer style="margin-top:24px; padding:0">
+        <footer style="margin-top:24px; padding:0; display: none;">
             <a href="<?= BASE_URL ?>/pages/admin.php" title="Área administrativa">⚙</a>
         </footer>
 
