@@ -7,7 +7,7 @@
 // ── Informações do sistema ──────────────────────────────
 define('SISTEMA_NOME',    'Controle de Carga');
 define('SISTEMA_VERSAO',  '1.0');
-define('BASE_URL',        'http://192.168.0.101/sistema_csr'); // Troque em produção
+define('BASE_URL',        'http://192.168.0.100/sistema_csr'); // Troque em produção
 
 // ── Horários de operação ────────────────────────────────
 define('HORA_SAIDA_INICIO',   '00:00');
@@ -21,7 +21,7 @@ define('HORA_VENDA_FIM',      '23:59');
 define('SESSAO_TIMEOUT',       1800);   // 30 minutos em segundos
 define('MAX_TENTATIVAS_LOGIN', 3);     // Tentativas antes de bloquear
 define('BLOQUEIO_MINUTOS',     15);     // Minutos de bloqueio
-define('QR_EXPIRACAO_HORAS',   0.02);     // Validade do token QR
+define('QR_EXPIRACAO_HORAS',   0.20);     // Validade do token QR
 define('MANUTENCAO_TIMEOUT',   900);   // 15 min de timeout do modo manutenção
 
 // ── Cores do sistema (para uso no PHP quando necessário) ─

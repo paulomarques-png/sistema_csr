@@ -254,16 +254,17 @@ label {
 
 /* ── Tabelas ──────────────────────────────────────────── */
 .tabela-wrapper { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; text-align: center;}
+th:first-child { text-align: left; }
 th {
     background: var(--primaria);
     color: var(--branco);
     padding: 10px 12px;
-    text-align: left;
     font-weight: 600;
     white-space: nowrap;
 }
 td { padding: 9px 12px; border-bottom: 1px solid var(--cinza-claro); }
+td:first-child { text-align: left; }
 tr:hover td { background: #f0f4ff; }
 tr:last-child td { border-bottom: none; }
 
@@ -1079,7 +1080,7 @@ tr.audit-linha-aviso:hover td { background: #fef3c7; }
     .site-header, .site-nav, footer,
     .rel-filtros, .dd-wrap, .btn, .btn-pequeno,
     .grid-stats, .alerta, .page-top,
-    .legenda-cores, .card-titulo,
+    .legenda-cores, .card-titulo, .dash-card-qr, 
     .col-acao, .linha-total { display: none !important; }
 
     /* Cabeçalho centralizado */
@@ -1323,7 +1324,7 @@ tr.audit-linha-aviso:hover td { background: #fef3c7; }
 .vapp-saldo-data {
     font-size: 13px;
     color: var(--cinza-texto);
-    margin-top: 2px;
+    margin: 15px 0 10px;
 }
 
 /* ── Card de saldo total ─────────────────────────────────────── */
@@ -1762,4 +1763,100 @@ tr.audit-linha-retroativa:hover td {
 .audit-badge-retroativa {
     background: #fff3cd;
     color: #856404;
+}
+
+/* ── App Vendedor: seções de QR pendentes ───────────────────────── */
+.vapp-qr-secoes {
+    margin: 12px 0 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.vapp-qr-grupo {
+    border-radius: 10px;
+    overflow: hidden;
+    font-size: 13px;
+}
+
+.vapp-qr-grupo-titulo {
+    padding: 8px 14px;
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: .3px;
+}
+
+.vapp-qr-grupo--aguardando {
+    background: #fffbea;
+    border: 1px solid #ffeeba;
+}
+.vapp-qr-grupo--aguardando .vapp-qr-grupo-titulo {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.vapp-qr-grupo--rejeitado {
+    background: #fff0f0;
+    border: 1px solid #f5c6cb;
+}
+.vapp-qr-grupo--rejeitado .vapp-qr-grupo-titulo {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.vapp-qr-grupo--expirado {
+    background: #f4f6fa;
+    border: 1px solid #ced4da;
+}
+.vapp-qr-grupo--expirado .vapp-qr-grupo-titulo {
+    background: #e9ecef;
+    color: #495057;
+}
+
+.vapp-qr-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 14px;
+    border-top: 1px solid rgba(0,0,0,.06);
+}
+.vapp-qr-item:first-of-type {
+    border-top: none;
+}
+
+.vapp-qr-item-info {
+    flex: 1;
+    line-height: 1.4;
+    color: #333;
+}
+
+.vapp-qr-item-badge {
+    flex-shrink: 0;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.vapp-qr-item-badge--ag {
+    background: var(--primaria, #2B2B88);
+    color: #fff;
+}
+.vapp-qr-item-badge--rej {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+.vapp-qr-item-badge--exp {
+    background: #e9ecef;
+    color: #6c757d;
+    border: 1px solid #ced4da;
+}
+
+/* Separador visual entre alertas e a data */
+.vapp-separador-data {
+    margin: 14px -20px 0 -20px;
+    border-top: 2px dashed rgba(0,0,0,.08);
 }

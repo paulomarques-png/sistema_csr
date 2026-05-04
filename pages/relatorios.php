@@ -1,7 +1,6 @@
 <?php
 // ============================================================
 // pages/relatorios.php — Relatório Unificado de Movimentação
-// Salvar em: C:\xampp\htdocs\sistema_csr\pages\relatorios.php
 // ============================================================
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../config/database.php';
@@ -28,27 +27,41 @@ $vendedores = $pdo->query(
     "SELECT id, nome FROM vendedores WHERE ativo = 1 ORDER BY nome"
 )->fetchAll();
 
-// ── Montagem dos dados ───────────────────────────────────────────
+// ── Inicializa estrutura de dados ────────────────────────────────
 $dados = [];
 foreach ($vendedores as $v) {
     $dados[$v['id']] = [
-        'nome'          => $v['nome'],
-        'produtos'      => [],
-        'registros'     => [],
-        'qr_pendentes'  => 0,
-        'tot_saida'     => 0,
-        'tot_retorno'   => 0,
-        'tot_vendido'   => 0,
-        'saldo'         => 0,
-        'tem_pendencia' => false,
-        'tem_movimento' => false,
+        'nome'              => $v['nome'],
+        'produtos'          => [],
+        'registros'         => [],
+        'tot_saida'         => 0,    // apenas confirmados
+        'tot_retorno'       => 0,    // apenas confirmados
+        'tot_vendido'       => 0,
+        'pend_saida'        => 0,    // aguardando QR (não entram no saldo)
+        'pend_retorno'      => 0,    // aguardando QR (não entram no saldo)
+        'rej_saida'         => 0,    // rejeitados pelo vendedor (não entram no saldo)
+        'rej_retorno'       => 0,    // rejeitados pelo vendedor (não entram no saldo)
+        'saldo'             => 0,    // calculado só de confirmados
+        'tem_pendencia'     => false, // saldo != 0
+        'tem_pend_nao_conf' => false, // tem registros não confirmados
+        'tem_rejeitado'     => false, // tem registros rejeitados não corrigidos
+        'tem_movimento'     => false,
     ];
 }
 
+// CORREÇÃO: initProd agora inclui pend_saida, pend_retorno, rej_saida, rej_retorno por produto
 function initProd(array &$dados, $vid, $cod, $pnome): void {
     if (!isset($dados[$vid]['produtos'][$cod])) {
         $dados[$vid]['produtos'][$cod] = [
-            'produto' => $pnome, 'saida' => 0, 'retorno' => 0, 'vendido' => 0, 'saldo' => 0,
+            'produto'      => $pnome,
+            'saida'        => 0,
+            'retorno'      => 0,
+            'vendido'      => 0,
+            'saldo'        => 0,
+            'pend_saida'   => 0,
+            'pend_retorno' => 0,
+            'rej_saida'    => 0,
+            'rej_retorno'  => 0,
         ];
     }
 }
@@ -64,37 +77,56 @@ if ($vid_filtro && is_numeric($vid_filtro)) {
     $p_s[':vid'] = $p_r[':vid'] = $p_v[':vid'] = (int)$vid_filtro;
 }
 
-// Saídas
-$st = $pdo->prepare("SELECT s.vendedor_id, s.vendedor, s.codigo, s.produto,
-    SUM(s.quantidade) AS qtd FROM reg_saidas s
+// CORREÇÃO: Saídas — CASE WHEN separa confirmados, pendentes e rejeitados em uma só query
+$st = $pdo->prepare("
+    SELECT s.vendedor_id, s.vendedor, s.codigo, s.produto,
+        SUM(CASE WHEN s.confirmado = 1 AND s.rejeitado = 0 THEN s.quantidade ELSE 0 END) AS qtd_conf,
+        SUM(CASE WHEN s.confirmado = 0 AND s.rejeitado = 0 THEN s.quantidade ELSE 0 END) AS qtd_pend,
+        SUM(CASE WHEN s.rejeitado  = 1                     THEN s.quantidade ELSE 0 END) AS qtd_rej
+    FROM reg_saidas s
     WHERE s.data BETWEEN :di AND :df $es
-    GROUP BY s.vendedor_id, s.vendedor, s.codigo, s.produto");
+    GROUP BY s.vendedor_id, s.vendedor, s.codigo, s.produto
+    HAVING qtd_conf > 0 OR qtd_pend > 0 OR qtd_rej > 0
+");
 $st->execute($p_s);
 foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
     if (!isset($dados[$r['vendedor_id']])) continue;
     initProd($dados, $r['vendedor_id'], $r['codigo'], $r['produto']);
-    $dados[$r['vendedor_id']]['produtos'][$r['codigo']]['saida'] += (int)$r['qtd'];
+    $dados[$r['vendedor_id']]['produtos'][$r['codigo']]['saida']      += (int)$r['qtd_conf'];
+    $dados[$r['vendedor_id']]['produtos'][$r['codigo']]['pend_saida'] += (int)$r['qtd_pend'];
+    $dados[$r['vendedor_id']]['produtos'][$r['codigo']]['rej_saida']  += (int)$r['qtd_rej'];
     $dados[$r['vendedor_id']]['tem_movimento'] = true;
 }
 
-// Retornos
-$st = $pdo->prepare("SELECT r.vendedor_id, r.vendedor, r.codigo, r.produto,
-    SUM(r.quantidade) AS qtd FROM reg_retornos r
+// CORREÇÃO: Retornos — mesma lógica
+$st = $pdo->prepare("
+    SELECT r.vendedor_id, r.vendedor, r.codigo, r.produto,
+        SUM(CASE WHEN r.confirmado = 1 AND r.rejeitado = 0 THEN r.quantidade ELSE 0 END) AS qtd_conf,
+        SUM(CASE WHEN r.confirmado = 0 AND r.rejeitado = 0 THEN r.quantidade ELSE 0 END) AS qtd_pend,
+        SUM(CASE WHEN r.rejeitado  = 1                     THEN r.quantidade ELSE 0 END) AS qtd_rej
+    FROM reg_retornos r
     WHERE r.data BETWEEN :di AND :df $er
-    GROUP BY r.vendedor_id, r.vendedor, r.codigo, r.produto");
+    GROUP BY r.vendedor_id, r.vendedor, r.codigo, r.produto
+    HAVING qtd_conf > 0 OR qtd_pend > 0 OR qtd_rej > 0
+");
 $st->execute($p_r);
 foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
     if (!isset($dados[$r['vendedor_id']])) continue;
     initProd($dados, $r['vendedor_id'], $r['codigo'], $r['produto']);
-    $dados[$r['vendedor_id']]['produtos'][$r['codigo']]['retorno'] += (int)$r['qtd'];
+    $dados[$r['vendedor_id']]['produtos'][$r['codigo']]['retorno']       += (int)$r['qtd_conf'];
+    $dados[$r['vendedor_id']]['produtos'][$r['codigo']]['pend_retorno']  += (int)$r['qtd_pend'];
+    $dados[$r['vendedor_id']]['produtos'][$r['codigo']]['rej_retorno']   += (int)$r['qtd_rej'];
     $dados[$r['vendedor_id']]['tem_movimento'] = true;
 }
 
-// Vendas
-$st = $pdo->prepare("SELECT v.vendedor_id, v.vendedor, v.codigo, v.produto,
-    SUM(v.quantidade) AS qtd FROM reg_vendas v
+// Vendas (não têm QR, sempre confirmadas)
+$st = $pdo->prepare("
+    SELECT v.vendedor_id, v.vendedor, v.codigo, v.produto,
+        SUM(v.quantidade) AS qtd
+    FROM reg_vendas v
     WHERE v.data BETWEEN :di AND :df $ev
-    GROUP BY v.vendedor_id, v.vendedor, v.codigo, v.produto");
+    GROUP BY v.vendedor_id, v.vendedor, v.codigo, v.produto
+");
 $st->execute($p_v);
 foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
     if (!isset($dados[$r['vendedor_id']])) continue;
@@ -103,45 +135,116 @@ foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
     $dados[$r['vendedor_id']]['tem_movimento'] = true;
 }
 
-// Saldos
+// Saldos e acumulação de totais por vendor
 foreach ($dados as $vid => &$vend) {
     foreach ($vend['produtos'] as $cod => &$prod) {
-        $prod['saldo']        = $prod['saida'] - $prod['retorno'] - $prod['vendido'];
-        $vend['tot_saida']   += $prod['saida'];
-        $vend['tot_retorno'] += $prod['retorno'];
-        $vend['tot_vendido'] += $prod['vendido'];
-        $vend['saldo']       += $prod['saldo'];
+        // Saldo = apenas confirmados
+        $prod['saldo']         = $prod['saida'] - $prod['retorno'] - $prod['vendido'];
+        $vend['tot_saida']    += $prod['saida'];
+        $vend['tot_retorno']  += $prod['retorno'];
+        $vend['tot_vendido']  += $prod['vendido'];
+        $vend['saldo']        += $prod['saldo'];
+        $vend['pend_saida']   += $prod['pend_saida'];
+        $vend['pend_retorno'] += $prod['pend_retorno'];
+        $vend['rej_saida']    += $prod['rej_saida'];
+        $vend['rej_retorno']  += $prod['rej_retorno'];
         if ($prod['saldo'] != 0) $vend['tem_pendencia'] = true;
     }
     unset($prod);
+    if ($vend['pend_saida'] > 0 || $vend['pend_retorno'] > 0) {
+        $vend['tem_pend_nao_conf'] = true;
+    }
+    if ($vend['rej_saida'] > 0 || $vend['rej_retorno'] > 0) {
+        $vend['tem_rejeitado'] = true;
+    }
 }
 unset($vend);
 
-// Extrato cronológico
+// CORREÇÃO: Extrato cronológico — confirmados + pendentes + rejeitados
 $p_ext = [
-    ':di1' => $data_ini, ':df1' => $data_fim,
-    ':di2' => $data_ini, ':df2' => $data_fim,
-    ':di3' => $data_ini, ':df3' => $data_fim,
+    ':di1'  => $data_ini, ':df1'  => $data_fim,
+    ':di1b' => $data_ini, ':df1b' => $data_fim,
+    ':di1c' => $data_ini, ':df1c' => $data_fim,
+    ':di2'  => $data_ini, ':df2'  => $data_fim,
+    ':di2b' => $data_ini, ':df2b' => $data_fim,
+    ':di2c' => $data_ini, ':df2c' => $data_fim,
+    ':di3'  => $data_ini, ':df3'  => $data_fim,
 ];
 $es1 = $er1 = $ev1 = '';
+$es1b = $er1b = '';
+$es1c = $er1c = '';
 if ($vid_filtro && is_numeric($vid_filtro)) {
-    $es1 = ' AND s.vendedor_id = :vid1';
-    $er1 = ' AND r.vendedor_id = :vid2';
-    $ev1 = ' AND v.vendedor_id = :vid3';
-    $p_ext[':vid1'] = $p_ext[':vid2'] = $p_ext[':vid3'] = (int)$vid_filtro;
+    $es1  = ' AND s.vendedor_id = :vid1';
+    $es1b = ' AND s.vendedor_id = :vid1b';
+    $es1c = ' AND s.vendedor_id = :vid1c';
+    $er1  = ' AND r.vendedor_id = :vid2';
+    $er1b = ' AND r.vendedor_id = :vid2b';
+    $er1c = ' AND r.vendedor_id = :vid2c';
+    $ev1  = ' AND v.vendedor_id = :vid3';
+    $p_ext[':vid1']  = (int)$vid_filtro;
+    $p_ext[':vid1b'] = (int)$vid_filtro;
+    $p_ext[':vid1c'] = (int)$vid_filtro;
+    $p_ext[':vid2']  = (int)$vid_filtro;
+    $p_ext[':vid2b'] = (int)$vid_filtro;
+    $p_ext[':vid2c'] = (int)$vid_filtro;
+    $p_ext[':vid3']  = (int)$vid_filtro;
 }
+
 $st = $pdo->prepare("
-    SELECT 'Saída'   AS tipo, s.data, s.hora, s.codigo, s.produto,
-           s.quantidade, COALESCE(s.obs,'') AS obs, '' AS pedido, s.vendedor_id
-    FROM reg_saidas s WHERE s.data BETWEEN :di1 AND :df1 $es1
+    SELECT 'Saída'   AS tipo, 'confirmado' AS status_conf,
+           s.data, s.hora, s.codigo, s.produto, s.quantidade,
+           COALESCE(s.obs,'') AS obs, '' AS pedido, s.vendedor_id
+    FROM reg_saidas s
+    WHERE s.data BETWEEN :di1 AND :df1 AND s.confirmado = 1 AND s.rejeitado = 0 $es1
+
     UNION ALL
-    SELECT 'Retorno', r.data, r.hora, r.codigo, r.produto,
-           r.quantidade, COALESCE(r.obs,''), '', r.vendedor_id
-    FROM reg_retornos r WHERE r.data BETWEEN :di2 AND :df2 $er1
+
+    SELECT 'Saída', 'pendente',
+           s.data, s.hora, s.codigo, s.produto, s.quantidade,
+           COALESCE(s.obs,''), '', s.vendedor_id
+    FROM reg_saidas s
+    WHERE s.data BETWEEN :di1b AND :df1b AND s.confirmado = 0 AND s.rejeitado = 0 $es1b
+
     UNION ALL
-    SELECT 'Venda',   v.data, v.hora, v.codigo, v.produto,
-           v.quantidade, COALESCE(v.obs,''), COALESCE(v.pedido,''), v.vendedor_id
-    FROM reg_vendas v WHERE v.data BETWEEN :di3 AND :df3 $ev1
+
+    SELECT 'Saída', 'rejeitado',
+           s.data, s.hora, s.codigo, s.produto, s.quantidade,
+           COALESCE(s.obs,''), '', s.vendedor_id
+    FROM reg_saidas s
+    WHERE s.data BETWEEN :di1c AND :df1c AND s.rejeitado = 1 $es1c
+
+    UNION ALL
+
+    SELECT 'Retorno', 'confirmado',
+           r.data, r.hora, r.codigo, r.produto, r.quantidade,
+           COALESCE(r.obs,''), '', r.vendedor_id
+    FROM reg_retornos r
+    WHERE r.data BETWEEN :di2 AND :df2 AND r.confirmado = 1 AND r.rejeitado = 0 $er1
+
+    UNION ALL
+
+    SELECT 'Retorno', 'pendente',
+           r.data, r.hora, r.codigo, r.produto, r.quantidade,
+           COALESCE(r.obs,''), '', r.vendedor_id
+    FROM reg_retornos r
+    WHERE r.data BETWEEN :di2b AND :df2b AND r.confirmado = 0 AND r.rejeitado = 0 $er1b
+
+    UNION ALL
+
+    SELECT 'Retorno', 'rejeitado',
+           r.data, r.hora, r.codigo, r.produto, r.quantidade,
+           COALESCE(r.obs,''), '', r.vendedor_id
+    FROM reg_retornos r
+    WHERE r.data BETWEEN :di2c AND :df2c AND r.rejeitado = 1 $er1c
+
+    UNION ALL
+
+    SELECT 'Venda', 'confirmado',
+           v.data, v.hora, v.codigo, v.produto, v.quantidade,
+           COALESCE(v.obs,''), COALESCE(v.pedido,''), v.vendedor_id
+    FROM reg_vendas v
+    WHERE v.data BETWEEN :di3 AND :df3 $ev1
+
     ORDER BY data ASC, hora ASC, tipo ASC
 ");
 $st->execute($p_ext);
@@ -151,45 +254,91 @@ foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $reg) {
     }
 }
 
-// QR pendentes
-$p_qr  = [':di' => $data_ini, ':df' => $data_fim];
-$ex_qr = '';
-if ($vid_filtro && is_numeric($vid_filtro)) {
-    $ex_qr = ' AND vendedor_id = :vid';
-    $p_qr[':vid'] = (int)$vid_filtro;
-}
-$st = $pdo->prepare("SELECT vendedor_id, COUNT(*) AS qtd FROM qr_tokens
-    WHERE DATE(data_ref) BETWEEN :di AND :df AND usado = 0 AND expira_em > NOW()
-    $ex_qr GROUP BY vendedor_id");
-$st->execute($p_qr);
-foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-    if (isset($dados[$r['vendedor_id']])) {
-        $dados[$r['vendedor_id']]['qr_pendentes'] = (int)$r['qtd'];
+// ── QR tokens pendentes, rejeitados e expirados — SEM filtro de data/vendedor ──
+// Esses alertas são globais: devem aparecer independente do filtro do relatório,
+// pois precisam ser resolvidos antes de qualquer análise de movimentação.
+$qrLinksAg  = [];
+$qrLinksRej = [];
+$qrLinksExp = [];
+
+$st_tok = $pdo->query("
+    SELECT t.token, t.tipo, t.vendedor_id, t.data_ref,
+           t.rejeitado, t.status, t.expira_em, v.nome AS vendedor
+    FROM qr_tokens t
+    INNER JOIN vendedores v ON v.id = t.vendedor_id
+    WHERE
+        -- Pendentes ainda válidos (não expirados, não rejeitados)
+        (t.usado = 0 AND t.rejeitado = 0 AND t.expira_em > NOW())
+        OR
+        -- Rejeitados não corrigidos
+        (t.rejeitado = 1 AND t.status = 'rejeitado'
+         AND NOT EXISTS (
+             SELECT 1 FROM qr_tokens t2
+             WHERE t2.vendedor_id = t.vendedor_id AND t2.data_ref = t.data_ref
+               AND t2.tipo = t.tipo AND t2.id > t.id
+               AND t2.status IN ('pendente','confirmado')
+         ))
+        OR
+        -- Expirados sem confirmação
+        (t.usado = 0 AND t.rejeitado = 0 AND t.expira_em <= NOW())
+    ORDER BY t.vendedor_id, t.data_ref
+");
+foreach ($st_tok->fetchAll(PDO::FETCH_ASSOC) as $r) {
+    if (!$r['rejeitado'] && strtotime($r['expira_em']) > time()) {
+        // Pendente válido
+        $qrLinksAg[$r['vendedor_id']][] = [
+            'tipo'        => $r['tipo'],
+            'nome'        => $r['vendedor'],
+            'data_ref'    => $r['data_ref'],
+            'expira_em'   => $r['expira_em'],
+            'vendedor_id' => $r['vendedor_id'],
+        ];
+    } elseif ($r['rejeitado']) {
+        $qrLinksRej[$r['vendedor_id']][] = [
+            'tipo'     => $r['tipo'],
+            'token'    => $r['token'],
+            'nome'     => $r['vendedor'],
+            'data_ref' => $r['data_ref'],
+        ];
+    } else {
+        // Expirado
+        $qrLinksExp[$r['vendedor_id']][] = [
+            'tipo'        => $r['tipo'],
+            'nome'        => $r['vendedor'],
+            'data_ref'    => $r['data_ref'],
+            'expira_em'   => $r['expira_em'],
+            'vendedor_id' => $r['vendedor_id'],
+        ];
     }
 }
 
-// Filtro apenas pendências
-if ($so_pend) {
-    $dados = array_filter($dados, fn($v) => $v['tem_pendencia'] || $v['qr_pendentes'] > 0);
-}
+$dados = array_filter($dados, fn($v) => $v['tem_pendencia'] || $v['tem_pend_nao_conf'] || $v['tem_rejeitado']);
 
-// Ordenação: negativos → pendentes → com movimento → sem movimento → alfabético
+// Ordenação: negativos → pendentes (saldo) → rejeitados → pend não conf → com movimento → sem movimento → alfa
 uasort($dados, function ($a, $b) {
     $ca = $a['tem_pendencia'] && $a['saldo'] < 0;
     $cb = $b['tem_pendencia'] && $b['saldo'] < 0;
     if ($ca !== $cb) return $cb <=> $ca;
-    if ($a['tem_pendencia'] !== $b['tem_pendencia']) return $b['tem_pendencia'] <=> $a['tem_pendencia'];
-    if ($a['tem_movimento']  !== $b['tem_movimento'])  return $b['tem_movimento']  <=> $a['tem_movimento'];
+    if ($a['tem_pendencia']     !== $b['tem_pendencia'])     return $b['tem_pendencia']     <=> $a['tem_pendencia'];
+    if ($a['tem_rejeitado']     !== $b['tem_rejeitado'])     return $b['tem_rejeitado']     <=> $a['tem_rejeitado'];
+    if ($a['tem_pend_nao_conf'] !== $b['tem_pend_nao_conf']) return $b['tem_pend_nao_conf'] <=> $a['tem_pend_nao_conf'];
+    if ($a['tem_movimento']     !== $b['tem_movimento'])     return $b['tem_movimento']     <=> $a['tem_movimento'];
     return strcmp($a['nome'], $b['nome']);
 });
 
 // Totais gerais
-$g_saida   = array_sum(array_column($dados, 'tot_saida'));
-$g_retorno = array_sum(array_column($dados, 'tot_retorno'));
-$g_vendido = array_sum(array_column($dados, 'tot_vendido'));
-$g_saldo   = array_sum(array_column($dados, 'saldo'));
-$g_pend    = count(array_filter($dados, fn($v) => $v['tem_pendencia']));
-$g_qrpend  = array_sum(array_column($dados, 'qr_pendentes'));
+$g_saida         = array_sum(array_column($dados, 'tot_saida'));
+$g_retorno       = array_sum(array_column($dados, 'tot_retorno'));
+$g_vendido       = array_sum(array_column($dados, 'tot_vendido'));
+$g_saldo         = array_sum(array_column($dados, 'saldo'));
+$g_pend          = count(array_filter($dados, fn($v) => $v['tem_pendencia']));
+$g_pend_saida    = array_sum(array_column($dados, 'pend_saida'));
+$g_pend_retorno  = array_sum(array_column($dados, 'pend_retorno'));
+$g_pend_nao_conf = $g_pend_saida + $g_pend_retorno;
+$g_rej_saida     = array_sum(array_column($dados, 'rej_saida'));
+$g_rej_retorno   = array_sum(array_column($dados, 'rej_retorno'));
+$g_rej_total     = $g_rej_saida + $g_rej_retorno;
+$g_rejeitados    = count(array_filter($dados, fn($v) => $v['tem_rejeitado']));
 
 $periodo_label = ($data_ini === $data_fim)
     ? formatarData($data_ini)
@@ -203,10 +352,12 @@ $csv_qs = http_build_query([
 ]);
 
 // ── Helpers ──────────────────────────────────────────────────────
-function badgeStatus(int $saldo, bool $mov): string {
-    if (!$mov) return '<span class="badge badge-cinza">— Sem movimento</span>';
-    if ($saldo === 0) return '<span class="badge badge-verde">✓ Zerado</span>';
-    if ($saldo > 0)   return '<span class="badge badge-amarelo">⚠ Em aberto</span>';
+function badgeStatus(int $saldo, bool $mov, bool $temPendNaoConf = false, bool $temRejeitado = false): string {
+    if (!$mov && !$temPendNaoConf && !$temRejeitado) return '<span class="badge badge-cinza">— Sem movimento</span>';
+    if ($temRejeitado) return '<span class="badge badge-vermelho">❌ Rejeitado</span>';
+    if ($saldo === 0 && !$temPendNaoConf) return '<span class="badge badge-verde">✓ Zerado</span>';
+    if ($saldo === 0 && $temPendNaoConf)  return '<span class="badge badge-amarelo">⏳ Aguard. QR</span>';
+    if ($saldo > 0) return '<span class="badge badge-amarelo">⚠ Em aberto</span>';
     return '<span class="badge badge-vermelho">⚠ Verificar</span>';
 }
 function badgeProd(int $saldo): string {
@@ -214,7 +365,22 @@ function badgeProd(int $saldo): string {
     if ($saldo > 0)   return '<span class="badge badge-amarelo">' . $saldo . ' pendente</span>';
     return '<span class="badge badge-vermelho">' . abs($saldo) . ' negativo</span>';
 }
-function badgeTipo(string $tipo): string {
+// badgeTipo diferencia confirmado, pendente e rejeitado
+function badgeTipo(string $tipo, string $statusConf = 'confirmado'): string {
+    if ($statusConf === 'pendente') {
+        return match($tipo) {
+            'Saída'   => '<span class="badge badge-amarelo" title="Aguardando confirmação QR">⏳ Saída</span>',
+            'Retorno' => '<span class="badge badge-amarelo" title="Aguardando confirmação QR">⏳ Retorno</span>',
+            default   => '<span class="badge badge-cinza">' . htmlspecialchars($tipo) . '</span>',
+        };
+    }
+    if ($statusConf === 'rejeitado') {
+        return match($tipo) {
+            'Saída'   => '<span class="badge badge-vermelho" title="Rejeitado pelo vendedor — aguarda correção">❌ Saída</span>',
+            'Retorno' => '<span class="badge badge-vermelho" title="Rejeitado pelo vendedor — aguarda correção">❌ Retorno</span>',
+            default   => '<span class="badge badge-cinza">' . htmlspecialchars($tipo) . '</span>',
+        };
+    }
     return match($tipo) {
         'Saída'   => '<span class="badge badge-tipo-saida">↑ Saída</span>',
         'Retorno' => '<span class="badge badge-tipo-retorno">↓ Retorno</span>',
@@ -245,6 +411,148 @@ function classeSaldo(int $saldo): string {
 </div>
 
 <main>
+
+<?php
+$totalCardsQR = count($qrLinksRej) + count($qrLinksAg) + count($qrLinksExp);
+$colgroup = '<colgroup>
+    <col style="width:28%"><col style="width:14%">
+    <col style="width:14%"><col style="width:30%"><col style="width:14%">
+</colgroup>';
+?>
+
+<?php if ($totalCardsQR > 0): ?>
+<div class="card dash-card-qr" style="margin-bottom:16px">
+    <div class="card-titulo dash-qr-titulo">
+        <span>🔔 Confirmações QR Code pendentes</span>
+        <span class="dash-qr-badges">
+            <?php if (!empty($qrLinksRej)): ?>
+                <span class="badge badge-vermelho"><?= array_sum(array_map('count', $qrLinksRej)) ?> rejeitado(s)</span>
+            <?php endif; ?>
+            <?php if (!empty($qrLinksAg)): ?>
+                <span class="badge badge-amarelo"><?= array_sum(array_map('count', $qrLinksAg)) ?> aguardando</span>
+            <?php endif; ?>
+            <?php if (!empty($qrLinksExp)): ?>
+                <span class="badge badge-cinza"><?= array_sum(array_map('count', $qrLinksExp)) ?> expirado(s)</span>
+            <?php endif; ?>
+        </span>
+    </div>
+    <p style="font-size:12px; color:var(--cinza-texto); margin: -4px 0 12px 0; padding:0 4px">
+        ⚠️ Esses registros estão pendentes no sistema independente do filtro de datas. Resolva-os antes de analisar o relatório.
+    </p>
+
+    <div class="dash-qr-abas">
+
+        <?php if (!empty($qrLinksRej)): ?>
+        <div class="dash-qr-secao">
+            <div class="dash-qr-secao-titulo dash-qr-rejeitado">❌ Rejeitados pelo Vendedor</div>
+            <div class="tabela-wrapper">
+                <table style="table-layout:fixed; width:100%">
+                    <?= $colgroup ?>
+                    <thead><tr>
+                        <th>Vendedor</th>
+                        <th style="text-align:center">Tipo</th>
+                        <th style="text-align:center">Data Ref.</th>
+                        <th>—</th>
+                        <th style="text-align:center">Ação</th>
+                    </tr></thead>
+                    <tbody>
+                    <?php foreach ($qrLinksRej as $vid => $tokens):
+                        foreach ($tokens as $tk):
+                            $pagina = $tk['tipo'] === 'saida' ? 'saida' : 'retorno';
+                            $url    = BASE_URL . '/pages/' . $pagina . '.php?etapa=corrigir&token=' . urlencode($tk['token']);
+                    ?>
+                    <tr class="dash-tr-rejeitado">
+                        <td><strong><?= esc($tk['nome']) ?></strong></td>
+                        <td style="text-align:center"><?= $tk['tipo'] === 'saida' ? '📤 Saída' : '📥 Retorno' ?></td>
+                        <td style="text-align:center"><?= formatarData($tk['data_ref']) ?></td>
+                        <td style="font-size:13px; color:var(--cinza-texto); font-style:italic">Aguarda correção do operador</td>
+                        <td style="text-align:center">
+                            <a href="<?= $url ?>" class="btn btn-vermelho btn-pequeno">✏️ Corrigir</a>
+                        </td>
+                    </tr>
+                    <?php endforeach; endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <?php if (!empty($qrLinksAg)): ?>
+        <div class="dash-qr-secao">
+            <div class="dash-qr-secao-titulo dash-qr-aguardando">⏳ Aguardando Confirmação</div>
+            <div class="tabela-wrapper">
+                <table style="table-layout:fixed; width:100%">
+                    <?= $colgroup ?>
+                    <thead><tr>
+                        <th>Vendedor</th>
+                        <th style="text-align:center">Tipo</th>
+                        <th style="text-align:center">Data Ref.</th>
+                        <th style="text-align:center">Expira em</th>
+                        <th style="text-align:center">Ação</th>
+                    </tr></thead>
+                    <tbody>
+                    <?php foreach ($qrLinksAg as $vid => $tokens):
+                        foreach ($tokens as $tk):
+                            $pagina = $tk['tipo'] === 'saida' ? 'saida' : 'retorno';
+                            $url    = BASE_URL . '/pages/' . $pagina . '.php?etapa=reenviar&vid=' . (int)$vid . '&data=' . urlencode($tk['data_ref']);
+                    ?>
+                    <tr class="dash-tr-aguardando">
+                        <td><strong><?= esc($tk['nome']) ?></strong></td>
+                        <td style="text-align:center"><?= $tk['tipo'] === 'saida' ? '📤 Saída' : '📥 Retorno' ?></td>
+                        <td style="text-align:center"><?= formatarData($tk['data_ref']) ?></td>
+                        <td style="text-align:center; font-size:13px; color:var(--cinza-texto)"><?= formatarDataHora($tk['expira_em']) ?></td>
+                        <td style="text-align:center">
+                            <a href="<?= $url ?>" class="btn btn-acento btn-pequeno">📲 Reenviar QR</a>
+                        </td>
+                    </tr>
+                    <?php endforeach; endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <?php if (!empty($qrLinksExp)): ?>
+        <div class="dash-qr-secao">
+            <div class="dash-qr-secao-titulo dash-qr-expirado">
+                🕒 Expirados sem Confirmação
+                <span class="dash-qr-expirado-aviso">— Clique em "Reenviar" para gerar novo QR com os mesmos dados.</span>
+            </div>
+            <div class="tabela-wrapper">
+                <table style="table-layout:fixed; width:100%">
+                    <?= $colgroup ?>
+                    <thead><tr>
+                        <th>Vendedor</th>
+                        <th style="text-align:center">Tipo</th>
+                        <th style="text-align:center">Data Ref.</th>
+                        <th style="text-align:center">Expirou em</th>
+                        <th style="text-align:center">Ação</th>
+                    </tr></thead>
+                    <tbody>
+                    <?php foreach ($qrLinksExp as $vid => $tokens):
+                        foreach ($tokens as $tk):
+                            $pagina = $tk['tipo'] === 'saida' ? 'saida' : 'retorno';
+                            $url    = BASE_URL . '/pages/' . $pagina . '.php?etapa=reenviar&vid=' . (int)$vid . '&data=' . urlencode($tk['data_ref']);
+                    ?>
+                    <tr class="dash-tr-expirado">
+                        <td><strong><?= esc($tk['nome']) ?></strong></td>
+                        <td style="text-align:center"><?= $tk['tipo'] === 'saida' ? '📤 Saída' : '📥 Retorno' ?></td>
+                        <td style="text-align:center"><?= formatarData($tk['data_ref']) ?></td>
+                        <td style="text-align:center; font-size:13px; color:var(--cinza-texto)"><?= formatarDataHora($tk['expira_em']) ?></td>
+                        <td style="text-align:center">
+                            <a href="<?= $url ?>" class="btn btn-secundario btn-pequeno">🔁 Reenviar QR</a>
+                        </td>
+                    </tr>
+                    <?php endforeach; endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <?php endif; ?>
+
+    </div><!-- /.dash-qr-abas -->
+</div>
+<?php endif; ?>
 
 <!-- ── Filtros ────────────────────────────────────────────────── -->
 <div class="card">
@@ -304,7 +612,7 @@ function classeSaldo(int $saldo): string {
     </form>
 </div>
 
-<!-- ── Alertas ────────────────────────────────────────────────── -->
+<!-- ── Alerta de saldo ─────────────────────────────────────────── -->
 <?php if ($g_pend > 0): ?>
 <div class="alerta alerta-aviso">
     ⚠️ <strong><?= $g_pend ?> vendedor(es) com saldo em aberto</strong>
@@ -313,16 +621,18 @@ function classeSaldo(int $saldo): string {
         $nomes = array_map(fn($v) => $v['nome'], array_filter($dados, fn($v) => $v['tem_pendencia']));
         echo implode(', ', array_map('esc', $nomes)) . '.';
     ?>
-    <?php if ($g_qrpend > 0): ?>
-    <br>⏳ Há <strong><?= $g_qrpend ?> QR Code(s) não confirmados</strong> — o saldo pode mudar.
+    <?php if ($g_pend_nao_conf > 0): ?>
+    <br>⏳ Há <strong><?= $g_pend_nao_conf ?> item(ns) aguardando confirmação de QR</strong>
+    (<?= $g_pend_saida ?> saída / <?= $g_pend_retorno ?> retorno) — <em>não entram no saldo até confirmados</em>.
     <?php endif; ?>
 </div>
-<?php elseif ($g_qrpend > 0): ?>
+<?php elseif ($g_pend_nao_conf > 0 && $totalCardsQR === 0): ?>
 <div class="alerta alerta-aviso">
-    ⏳ <strong><?= $g_qrpend ?> QR Code(s) aguardam confirmação.</strong>
-    Aguarde antes de exportar o relatório final.
+    ⏳ <strong><?= $g_pend_nao_conf ?> item(ns) aguardando confirmação de QR Code</strong>
+    (<?= $g_pend_saida ?> saída / <?= $g_pend_retorno ?> retorno).
+    O saldo ficará definitivo após confirmação pelo vendedor.
 </div>
-<?php elseif ($g_saida > 0): ?>
+<?php elseif ($g_saida > 0 && $totalCardsQR === 0 && $g_pend_nao_conf === 0): ?>
 <div class="alerta alerta-sucesso">
     ✅ <strong>Tudo certo!</strong> Todos os vendedores estão com saldo zerado
     no período <strong><?= esc($periodo_label) ?></strong>.
@@ -333,11 +643,21 @@ function classeSaldo(int $saldo): string {
 <div class="grid-stats">
     <div class="card-stat" style="border-left-color:var(--acento)">
         <div class="stat-num" style="color:var(--acento)"><?= $g_saida ?></div>
-        <div class="stat-label">📤 Total Saídas</div>
+        <div class="stat-label">📤 Saídas confirmadas</div>
+        <?php if ($g_pend_saida > 0): ?>
+        <div style="font-size:11px; color:var(--cinza-texto); margin-top:4px">
+            + <?= $g_pend_saida ?> aguardando QR
+        </div>
+        <?php endif; ?>
     </div>
     <div class="card-stat" style="border-left-color:#6f42c1">
         <div class="stat-num" style="color:#6f42c1"><?= $g_retorno ?></div>
-        <div class="stat-label">📥 Total Retornos</div>
+        <div class="stat-label">📥 Retornos confirmados</div>
+        <?php if ($g_pend_retorno > 0): ?>
+        <div style="font-size:11px; color:var(--cinza-texto); margin-top:4px">
+            + <?= $g_pend_retorno ?> aguardando QR
+        </div>
+        <?php endif; ?>
     </div>
     <div class="card-stat" style="border-left-color:var(--verde)">
         <div class="stat-num" style="color:var(--verde)"><?= $g_vendido ?></div>
@@ -365,6 +685,9 @@ function classeSaldo(int $saldo): string {
             <?php if ($g_pend > 0): ?>
                 &nbsp;·&nbsp; <strong style="color:var(--vermelho)"><?= $g_pend ?> com pendência</strong>
             <?php endif; ?>
+            <?php if ($g_pend_nao_conf > 0): ?>
+                &nbsp;·&nbsp; <strong style="color:var(--amarelo-escuro, #856404)"><?= $g_pend_nao_conf ?> item(ns) aguardando QR</strong>
+            <?php endif; ?>
         </small>
     </div>
 
@@ -377,7 +700,6 @@ function classeSaldo(int $saldo): string {
                 <th class="col-num">Retornos</th>
                 <th class="col-num">Vendidos</th>
                 <th class="col-num">Saldo</th>
-                <th class="col-num">QR Pend.</th>
                 <th class="col-num">Status</th>
                 <th class="col-acao">Detalhes</th>
             </tr>
@@ -385,7 +707,7 @@ function classeSaldo(int $saldo): string {
         <tbody>
 
         <?php if (empty($dados)): ?>
-        <tr><td colspan="8" class="td-vazio">Nenhum registro encontrado para o período selecionado.</td></tr>
+        <tr><td colspan="7" class="td-vazio">Nenhum registro encontrado para o período selecionado.</td></tr>
         <?php else: ?>
 
         <?php foreach ($dados as $vid => $vend): ?>
@@ -398,14 +720,38 @@ function classeSaldo(int $saldo): string {
                 <?php endif; ?>
             </td>
             <td class="col-num">
-                <?= $vend['tot_saida'] > 0
-                    ? '<strong style="color:var(--acento)">' . $vend['tot_saida'] . '</strong>'
-                    : '<span class="traco">—</span>' ?>
+                <?php if ($vend['tot_saida'] > 0): ?>
+                    <strong style="color:var(--acento)"><?= $vend['tot_saida'] ?></strong>
+                <?php elseif ($vend['pend_saida'] > 0 || $vend['rej_saida'] > 0): ?>
+                    <span class="traco">0</span>
+                <?php else: ?>
+                    <span class="traco">—</span>
+                <?php endif; ?>
+                <?php if ($vend['pend_saida'] > 0): ?>
+                    <br><span class="badge badge-amarelo" style="font-size:10px; margin-top:2px"
+                              title="Saída registrada, QR não confirmado">⏳ +<?= $vend['pend_saida'] ?> ag.</span>
+                <?php endif; ?>
+                <?php if ($vend['rej_saida'] > 0): ?>
+                    <br><span class="badge badge-vermelho" style="font-size:10px; margin-top:2px"
+                              title="Saída rejeitada pelo vendedor — aguarda correção">❌ +<?= $vend['rej_saida'] ?> rej.</span>
+                <?php endif; ?>
             </td>
             <td class="col-num">
-                <?= $vend['tot_retorno'] > 0
-                    ? $vend['tot_retorno']
-                    : '<span class="traco">—</span>' ?>
+                <?php if ($vend['tot_retorno'] > 0): ?>
+                    <?= $vend['tot_retorno'] ?>
+                <?php elseif ($vend['pend_retorno'] > 0 || $vend['rej_retorno'] > 0): ?>
+                    <span class="traco">0</span>
+                <?php else: ?>
+                    <span class="traco">—</span>
+                <?php endif; ?>
+                <?php if ($vend['pend_retorno'] > 0): ?>
+                    <br><span class="badge badge-amarelo" style="font-size:10px; margin-top:2px"
+                              title="Retorno registrado, QR não confirmado">⏳ +<?= $vend['pend_retorno'] ?> ag.</span>
+                <?php endif; ?>
+                <?php if ($vend['rej_retorno'] > 0): ?>
+                    <br><span class="badge badge-vermelho" style="font-size:10px; margin-top:2px"
+                              title="Retorno rejeitado pelo vendedor — aguarda correção">❌ +<?= $vend['rej_retorno'] ?> rej.</span>
+                <?php endif; ?>
             </td>
             <td class="col-num">
                 <?= $vend['tot_vendido'] > 0
@@ -413,20 +759,20 @@ function classeSaldo(int $saldo): string {
                     : '<span class="traco">—</span>' ?>
             </td>
             <td class="col-num">
-                <?php if ($vend['tem_movimento']): ?>
+                <?php if ($vend['tem_movimento'] || $vend['tem_pend_nao_conf'] || $vend['tem_rejeitado']): ?>
                     <strong class="<?= classeSaldo($vend['saldo']) ?> saldo-grande"><?= $vend['saldo'] ?></strong>
+                    <?php if ($vend['tem_pend_nao_conf'] || $vend['tem_rejeitado']): ?>
+                        <br><small style="color:var(--cinza-texto); font-size:10px">(parcial)</small>
+                    <?php endif; ?>
                 <?php else: ?>
                     <span class="traco">—</span>
                 <?php endif; ?>
             </td>
             <td class="col-num">
-                <?= $vend['qr_pendentes'] > 0
-                    ? '<span class="badge badge-amarelo">⏳ ' . $vend['qr_pendentes'] . '</span>'
-                    : '<span class="traco">—</span>' ?>
+                <?= badgeStatus($vend['saldo'], $vend['tem_movimento'], $vend['tem_pend_nao_conf'], $vend['tem_rejeitado']) ?>
             </td>
-            <td class="col-num"><?= badgeStatus($vend['saldo'], $vend['tem_movimento']) ?></td>
             <td class="col-acao">
-                <?php if ($vend['tem_movimento']): ?>
+                <?php if ($vend['tem_movimento'] || $vend['tem_pend_nao_conf'] || $vend['tem_rejeitado']): ?>
                 <button class="btn btn-acento btn-pequeno"
                         id="btnD-<?= (int)$vid ?>"
                         onclick="toggleDetalhe(<?= (int)$vid ?>)">▼ Detalhar</button>
@@ -436,9 +782,9 @@ function classeSaldo(int $saldo): string {
             </td>
         </tr>
 
-        <?php if ($vend['tem_movimento']): ?>
+        <?php if ($vend['tem_movimento'] || $vend['tem_pend_nao_conf'] || $vend['tem_rejeitado']): ?>
         <tr class="linha-detalhe" id="detalhe-<?= (int)$vid ?>" style="display:none">
-            <td colspan="8">
+            <td colspan="7">
                 <div class="detalhe-inner">
 
                     <div class="detalhe-secao">📦 Saldo por produto — <?= esc($vend['nome']) ?></div>
@@ -448,8 +794,8 @@ function classeSaldo(int $saldo): string {
                             <tr>
                                 <th>Código</th>
                                 <th>Produto</th>
-                                <th class="col-num">Saída</th>
-                                <th class="col-num">Retorno</th>
+                                <th class="col-num">Saída conf.</th>
+                                <th class="col-num">Ret. conf.</th>
                                 <th class="col-num">Vendido</th>
                                 <th class="col-num">Saldo</th>
                                 <th class="col-num">Status</th>
@@ -459,17 +805,40 @@ function classeSaldo(int $saldo): string {
                         <?php
                             $sub_s = $sub_r = $sub_v = $sub_sal = 0;
                             foreach ($vend['produtos'] as $cod => $prod):
-                                $sub_s += $prod['saida']; $sub_r += $prod['retorno'];
-                                $sub_v += $prod['vendido']; $sub_sal += $prod['saldo'];
+                                $sub_s   += $prod['saida'];
+                                $sub_r   += $prod['retorno'];
+                                $sub_v   += $prod['vendido'];
+                                $sub_sal += $prod['saldo'];
+                                $pPend    = $prod['pend_saida'] + $prod['pend_retorno'];
+                                $pRej     = $prod['rej_saida']  + $prod['rej_retorno'];
                         ?>
                         <tr class="<?= classeLinha($prod['saldo'], true) ?>">
                             <td><code class="cod"><?= esc($cod) ?></code></td>
                             <td><?= esc($prod['produto']) ?></td>
-                            <td class="col-num"><?= $prod['saida'] ?></td>
-                            <td class="col-num"><?= $prod['retorno'] ?></td>
-                            <td class="col-num"><?= $prod['vendido'] ?></td>
+                            <td class="col-num">
+                                <?= $prod['saida'] ?: '<span class="traco">—</span>' ?>
+                                <?php if ($prod['pend_saida'] > 0): ?>
+                                    <br><span class="badge badge-amarelo" style="font-size:10px">⏳ +<?= $prod['pend_saida'] ?></span>
+                                <?php endif; ?>
+                                <?php if ($prod['rej_saida'] > 0): ?>
+                                    <br><span class="badge badge-vermelho" style="font-size:10px">❌ +<?= $prod['rej_saida'] ?></span>
+                                <?php endif; ?>
+                            </td>
+                            <td class="col-num">
+                                <?= $prod['retorno'] ?: '<span class="traco">—</span>' ?>
+                                <?php if ($prod['pend_retorno'] > 0): ?>
+                                    <br><span class="badge badge-amarelo" style="font-size:10px">⏳ +<?= $prod['pend_retorno'] ?></span>
+                                <?php endif; ?>
+                                <?php if ($prod['rej_retorno'] > 0): ?>
+                                    <br><span class="badge badge-vermelho" style="font-size:10px">❌ +<?= $prod['rej_retorno'] ?></span>
+                                <?php endif; ?>
+                            </td>
+                            <td class="col-num"><?= $prod['vendido'] ?: '<span class="traco">—</span>' ?></td>
                             <td class="col-num">
                                 <strong class="<?= classeSaldo($prod['saldo']) ?>"><?= $prod['saldo'] ?></strong>
+                                <?php if ($pPend > 0 || $pRej > 0): ?>
+                                    <br><small style="color:var(--cinza-texto); font-size:10px">(parcial)</small>
+                                <?php endif; ?>
                             </td>
                             <td class="col-num"><?= badgeProd($prod['saldo']) ?></td>
                         </tr>
@@ -479,9 +848,7 @@ function classeSaldo(int $saldo): string {
                             <td class="col-num"><?= $sub_s ?></td>
                             <td class="col-num"><?= $sub_r ?></td>
                             <td class="col-num"><?= $sub_v ?></td>
-                            <td class="col-num">
-                                <strong class="<?= classeSaldo($sub_sal) ?>"><?= $sub_sal ?></strong>
-                            </td>
+                            <td class="col-num"><strong class="<?= classeSaldo($sub_sal) ?>"><?= $sub_sal ?></strong></td>
                             <td></td>
                         </tr>
                         </tbody>
@@ -491,6 +858,20 @@ function classeSaldo(int $saldo): string {
                     <?php if (!empty($vend['registros'])): ?>
                     <div class="detalhe-secao" style="margin-top:20px">
                         🕐 Extrato cronológico — <?= count($vend['registros']) ?> registro(s)
+                        <?php
+                            $qtdPendExt = count(array_filter($vend['registros'], fn($r) => ($r['status_conf'] ?? '') === 'pendente'));
+                            $qtdRejExt  = count(array_filter($vend['registros'], fn($r) => ($r['status_conf'] ?? '') === 'rejeitado'));
+                        ?>
+                        <?php if ($qtdPendExt > 0): ?>
+                            <span class="badge badge-amarelo" style="font-size:11px; margin-left:8px">
+                                ⏳ <?= $qtdPendExt ?> aguardando QR
+                            </span>
+                        <?php endif; ?>
+                        <?php if ($qtdRejExt > 0): ?>
+                            <span class="badge badge-vermelho" style="font-size:11px; margin-left:4px">
+                                ❌ <?= $qtdRejExt ?> rejeitado(s)
+                            </span>
+                        <?php endif; ?>
                     </div>
                     <div class="tabela-wrapper">
                     <table class="tabela-extrato">
@@ -507,14 +888,26 @@ function classeSaldo(int $saldo): string {
                             </tr>
                         </thead>
                         <tbody>
-                        <?php foreach ($vend['registros'] as $reg): ?>
-                        <tr>
+                        <?php foreach ($vend['registros'] as $reg):
+                            $isPendente  = ($reg['status_conf'] ?? 'confirmado') === 'pendente';
+                            $isRejeitado = ($reg['status_conf'] ?? 'confirmado') === 'rejeitado';
+                            $trStyle = $isRejeitado ? 'style="background:#fff0f0; opacity:.85"'
+                                     : ($isPendente ? 'style="background:#fffbea; opacity:.85"' : '');
+                        ?>
+                        <tr <?= $trStyle ?>>
                             <td class="nowrap"><?= formatarData($reg['data']) ?></td>
                             <td class="nowrap"><?= esc(substr($reg['hora'], 0, 5)) ?></td>
-                            <td><?= badgeTipo($reg['tipo']) ?></td>
+                            <td><?= badgeTipo($reg['tipo'], $reg['status_conf'] ?? 'confirmado') ?></td>
                             <td><code class="cod"><?= esc($reg['codigo']) ?></code></td>
                             <td><?= esc($reg['produto']) ?></td>
-                            <td class="col-num"><strong><?= (int)$reg['quantidade'] ?></strong></td>
+                            <td class="col-num">
+                                <strong><?= (int)$reg['quantidade'] ?></strong>
+                                <?php if ($isPendente): ?>
+                                    <br><small style="color:var(--cinza-texto); font-size:10px">ag. QR</small>
+                                <?php elseif ($isRejeitado): ?>
+                                    <br><small style="color:var(--vermelho); font-size:10px">rejeit.</small>
+                                <?php endif; ?>
+                            </td>
                             <td>
                                 <?= $reg['pedido']
                                     ? '<span class="badge badge-cinza">' . esc($reg['pedido']) . '</span>'
@@ -537,7 +930,7 @@ function classeSaldo(int $saldo): string {
 
         <?php endforeach; ?>
 
-        <?php if (count($dados) > 1 && $g_saida > 0): ?>
+        <?php if (count($dados) > 1 && ($g_saida > 0 || $g_pend_nao_conf > 0 || $g_rej_total > 0)): ?>
         <tr class="linha-total">
             <td><strong>TOTAL GERAL</strong></td>
             <td class="col-num"><?= $g_saida ?></td>
@@ -545,11 +938,6 @@ function classeSaldo(int $saldo): string {
             <td class="col-num"><?= $g_vendido ?></td>
             <td class="col-num">
                 <strong class="<?= classeSaldo($g_saldo) ?> saldo-grande"><?= $g_saldo ?></strong>
-            </td>
-            <td class="col-num">
-                <?= $g_qrpend > 0
-                    ? '<span class="badge badge-amarelo">' . $g_qrpend . '</span>'
-                    : '<span class="traco">—</span>' ?>
             </td>
             <td colspan="2"></td>
         </tr>
@@ -563,16 +951,22 @@ function classeSaldo(int $saldo): string {
     <div class="legenda-cores">
         <strong>Legenda:</strong>
         <span class="legenda-item">
-            <span class="legenda-bolinha" style="background:#f0fff4; border:1px solid #c3e6cb"></span> Zerado
+            <span class="legenda-bolinha" style="background:#f0fff4; border:1px solid #c3e6cb"></span> Zerado (confirmado)
         </span>
         <span class="legenda-item">
-            <span class="legenda-bolinha" style="background:#fffbea; border:1px solid #ffeeba"></span> Em aberto
+            <span class="legenda-bolinha" style="background:#fffbea; border:1px solid #ffeeba"></span> Em aberto / Aguard. QR
         </span>
         <span class="legenda-item">
-            <span class="legenda-bolinha" style="background:#fff0f0; border:1px solid #f5c6cb"></span> Verificar (negativo)
+            <span class="legenda-bolinha" style="background:#fff0f0; border:1px solid #f5c6cb"></span> Verificar (negativo) / Rejeitado
         </span>
         <span class="legenda-item">
             <span class="legenda-bolinha" style="background:#e9ecef; border:1px solid #ccc"></span> Sem movimento
+        </span>
+        <span class="legenda-item">
+            <span class="badge badge-amarelo" style="font-size:10px">⏳</span> Aguardando QR — não entra no saldo
+        </span>
+        <span class="legenda-item">
+            <span class="badge badge-vermelho" style="font-size:10px">❌</span> Rejeitado pelo vendedor — aguarda correção
         </span>
     </div>
 
