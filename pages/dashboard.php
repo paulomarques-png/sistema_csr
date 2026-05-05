@@ -58,10 +58,38 @@ function resumoVendedor(PDO $pdo, int $vendedorId, string $data): array
     $temPend = ($saidasPend > 0 || $retornosPend > 0);
     $temRej  = ($saidasRej  > 0 || $retornosRej  > 0);
 
+    // Detecta produtos desequilibrados mesmo quando saldo total = 0
+    // Ex: saída de produto C e retorno de produto A → saldo global 0, mas produtos não batem
+    $produtosDeseq = false;
+    if ($saldo === 0 && ($saidas > 0 || $retornos > 0 || $vendas > 0)) {
+        $stmtProd = $pdo->prepare("
+            SELECT COUNT(*) FROM (
+                SELECT codigo,
+                    SUM(CASE WHEN tipo='S' AND conf=1 AND rej=0 THEN qtd
+                             WHEN tipo='R' AND conf=1 AND rej=0 THEN -qtd
+                             WHEN tipo='V' THEN -qtd ELSE 0 END) AS saldo_prod
+                FROM (
+                    SELECT codigo,'S' tipo,confirmado conf,rejeitado rej,quantidade qtd
+                    FROM reg_saidas WHERE vendedor_id=:vid AND data=:data
+                    UNION ALL
+                    SELECT codigo,'R',confirmado,rejeitado,quantidade
+                    FROM reg_retornos WHERE vendedor_id=:vid AND data=:data
+                    UNION ALL
+                    SELECT codigo,'V',1,0,quantidade
+                    FROM reg_vendas WHERE vendedor_id=:vid AND data=:data
+                ) mov GROUP BY codigo HAVING saldo_prod != 0
+            ) sub
+        ");
+        $stmtProd->execute([':vid' => $vendedorId, ':data' => $data]);
+        $produtosDeseq = ((int)$stmtProd->fetchColumn()) > 0;
+    }
+
     if ($saidas === 0 && $retornos === 0 && $vendas === 0 && !$temPend && !$temRej) {
         $status = 'sem_movimento';
     } elseif ($temRej) {
         $status = 'rejeitado';
+    } elseif ($saldo === 0 && $produtosDeseq) {
+        $status = 'verificar'; // saldo total zerado mas produtos individuais não batem
     } elseif ($saldo === 0 && !$temPend) {
         $status = 'zerado';
     } elseif ($saldo === 0 && $temPend) {
@@ -243,7 +271,7 @@ $statusVenda   = verificarHorario('venda');
                             <strong><?= esc($p['nome']) ?></strong>
                             — <?= formatarData($p['data']) ?>
                             — Saldo: <strong><?= $p['saldo'] ?></strong> itens em aberto
-                            <a href="<?= $urlRelatorio ?>" class="dash-pendencia-link" title="Ver relatório deste dia">
+                            <a href="<?= $urlRelatorio ?>" class="dash-pendencia-link" target="_blank" title="Ver relatório deste dia">
                                 📊 Ver relatório →
                             </a>
                         </li>
@@ -296,29 +324,29 @@ $statusVenda   = verificarHorario('venda');
     <div class="botoes-operacao">
 
         <?php if (in_array($_SESSION['usuario_perfil'], ['operador', 'supervisor', 'master'])): ?>
-        <a href="<?= BASE_URL ?>/pages/saida.php" class="btn-operacao btn-op-saida">
+        <a href="<?= BASE_URL ?>/pages/saida.php" class="btn-operacao btn-op-saida" target="_blank">
             <span class="btn-op-icone">📤</span>
             <span class="btn-op-label">Registrar Saída</span>
         </a>
-        <a href="<?= BASE_URL ?>/pages/retorno.php" class="btn-operacao btn-op-retorno">
+        <a href="<?= BASE_URL ?>/pages/retorno.php" class="btn-operacao btn-op-retorno" target="_blank">
             <span class="btn-op-icone">📥</span>
             <span class="btn-op-label">Registrar Retorno</span>
         </a>
         <?php endif; ?>
 
         <?php if (in_array($_SESSION['usuario_perfil'], ['admin', 'supervisor', 'master'])): ?>
-        <a href="<?= BASE_URL ?>/pages/confirmar_venda.php" class="btn-operacao btn-op-venda">
+        <a href="<?= BASE_URL ?>/pages/confirmar_venda.php" class="btn-operacao btn-op-venda" target="_blank">
             <span class="btn-op-icone">✅</span>
             <span class="btn-op-label">Confirmar Venda</span>
         </a>
-        <a href="<?= BASE_URL ?>/pages/relatorios.php" class="btn-operacao btn-op-relatorio">
+        <a href="<?= BASE_URL ?>/pages/relatorios.php" class="btn-operacao btn-op-relatorio" target="_blank">
             <span class="btn-op-icone">📊</span>
             <span class="btn-op-label">Gerar Relatório</span>
         </a>
         <?php endif; ?>
 
         <?php if (in_array($_SESSION['usuario_perfil'], ['supervisor', 'master'])): ?>
-        <a href="<?= BASE_URL ?>/pages/cadastros.php" class="btn-operacao btn-op-cadastro">
+        <a href="<?= BASE_URL ?>/pages/cadastros.php" class="btn-operacao btn-op-cadastro" target="_blank">
             <span class="btn-op-icone">📋</span>
             <span class="btn-op-label">Cadastros</span>
         </a>
@@ -363,23 +391,23 @@ $statusVenda   = verificarHorario('venda');
                         <?= $colgroup ?>
                         <thead><tr>
                             <th>Vendedor</th>
-                            <th>Tipo</th>
-                            <th>Data Ref.</th>
+                            <th style="text-align:center">Tipo</th>
+                            <th style="text-align:center">Data Ref.</th>
                             <th>Motivo da Rejeição</th>
-                            <th>Ação</th>
+                            <th style="text-align:center">Ação</th>
                         </tr></thead>
                         <tbody>
                         <?php foreach ($qrsRejeitados as $qr): ?>
                         <tr class="dash-tr-rejeitado">
                             <td><strong><?= esc($qr['vendedor']) ?></strong></td>
-                            <td><?= $qr['tipo'] === 'saida' ? '📤 Saída' : '📥 Retorno' ?></td>
-                            <td><?= formatarData($qr['data_ref']) ?></td>
+                            <td style="text-align:center"><?= $qr['tipo'] === 'saida' ? '📤 Saída' : '📥 Retorno' ?></td>
+                            <td style="text-align:center"><?= formatarData($qr['data_ref']) ?></td>
                             <td style="font-size:13px; color:var(--cinza-texto); font-style:italic; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
                                 <?= $qr['rejeitado_motivo'] ? esc($qr['rejeitado_motivo']) : '—' ?>
                             </td>
-                            <td>
+                            <td style="text-align:center">
                                 <a href="<?= BASE_URL ?>/pages/<?= esc($qr['tipo']) ?>.php?etapa=corrigir&token=<?= esc($qr['token']) ?>"
-                                   class="btn btn-vermelho btn-pequeno">✏️ Corrigir</a>
+                                   class="btn btn-vermelho btn-pequeno" target="_blank">✏️ Corrigir</a>
                             </td>
                         </tr>
                         <?php endforeach; ?>
@@ -397,21 +425,21 @@ $statusVenda   = verificarHorario('venda');
                         <?= $colgroup ?>
                         <thead><tr>
                             <th>Vendedor</th>
-                            <th>Tipo</th>
-                            <th>Data Ref.</th>
-                            <th>Expira em</th>
-                            <th>Ação</th>
+                            <th style="text-align:center">Tipo</th>
+                            <th style="text-align:center">Data Ref.</th>
+                            <th style="text-align:center">Expira em</th>
+                            <th style="text-align:center">Ação</th>
                         </tr></thead>
                         <tbody>
                         <?php foreach ($qrsAguardando as $qr): ?>
                         <tr class="dash-tr-aguardando">
                             <td><strong><?= esc($qr['vendedor']) ?></strong></td>
-                            <td><?= $qr['tipo'] === 'saida' ? '📤 Saída' : '📥 Retorno' ?></td>
-                            <td><?= formatarData($qr['data_ref']) ?></td>
+                            <td style="text-align:center"><?= $qr['tipo'] === 'saida' ? '📤 Saída' : '📥 Retorno' ?></td>
+                            <td style="text-align:center"><?= formatarData($qr['data_ref']) ?></td>
                             <td style="text-align:center; font-size:13px; color:var(--cinza-texto)"><?= formatarDataHora($qr['expira_em']) ?></td>
-                            <td>
+                            <td style="text-align:center">
                                 <a href="<?= BASE_URL ?>/pages/<?= esc($qr['tipo']) ?>.php?etapa=reenviar&vid=<?= (int)$qr['vendedor_id'] ?>&data=<?= esc($qr['data_ref']) ?>"
-                                   class="btn btn-acento btn-pequeno">📲 Reenviar QR</a>
+                                   class="btn btn-acento btn-pequeno" target="_blank">📲 Reenviar QR</a>
                             </td>
                         </tr>
                         <?php endforeach; ?>
@@ -432,21 +460,21 @@ $statusVenda   = verificarHorario('venda');
                         <?= $colgroup ?>
                         <thead><tr>
                             <th>Vendedor</th>
-                            <th>Tipo</th>
-                            <th>Data Ref.</th>
-                            <th>Expirou em</th>
-                            <th>Ação</th>
+                            <th style="text-align:center">Tipo</th>
+                            <th style="text-align:center">Data Ref.</th>
+                            <th style="text-align:center">Expirou em</th>
+                            <th style="text-align:center">Ação</th>
                         </tr></thead>
                         <tbody>
                         <?php foreach ($qrsExpirados as $qr): ?>
                         <tr class="dash-tr-expirado">
                             <td><strong><?= esc($qr['vendedor']) ?></strong></td>
-                            <td><?= $qr['tipo'] === 'saida' ? '📤 Saída' : '📥 Retorno' ?></td>
-                            <td><?= formatarData($qr['data_ref']) ?></td>
+                            <td style="text-align:center"><?= $qr['tipo'] === 'saida' ? '📤 Saída' : '📥 Retorno' ?></td>
+                            <td style="text-align:center"><?= formatarData($qr['data_ref']) ?></td>
                             <td style="text-align:center; font-size:13px; color:var(--cinza-texto)"><?= formatarDataHora($qr['expira_em']) ?></td>
-                            <td>
+                            <td style="text-align:center">
                                 <a href="<?= BASE_URL ?>/pages/<?= esc($qr['tipo']) ?>.php?etapa=reenviar&vid=<?= (int)$qr['vendedor_id'] ?>&data=<?= esc($qr['data_ref']) ?>"
-                                   class="btn btn-secundario btn-pequeno">🔁 Reenviar QR</a>
+                                   class="btn btn-secundario btn-pequeno" target="_blank">🔁 Reenviar QR</a>
                             </td>
                         </tr>
                         <?php endforeach; ?>
@@ -506,11 +534,11 @@ $statusVenda   = verificarHorario('venda');
                 <thead>
                     <tr>
                         <th>Vendedor</th>
-                        <th>Saídas</th>
-                        <th>Retornos</th>
-                        <th>Vendas Conf.</th>
-                        <th>Saldo</th>
-                        <th>Status</th>
+                        <th style="text-align:center">Saídas</th>
+                        <th style="text-align:center">Retornos</th>
+                        <th style="text-align:center">Vendas Conf.</th>
+                        <th style="text-align:center">Saldo</th>
+                        <th style="text-align:center">Status</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -520,6 +548,7 @@ $statusVenda   = verificarHorario('venda');
                             'pendente'      => 'linha-aberto',
                             'aberto'        => 'linha-aberto',
                             'rejeitado'     => 'linha-negativo',
+                            'verificar'     => 'linha-negativo',
                             'negativo'      => 'linha-negativo',
                             'sem_movimento' => '',
                             default         => '',
@@ -529,6 +558,7 @@ $statusVenda   = verificarHorario('venda');
                             'pendente'      => ['badge-amarelo',  '⏳ Aguard. QR'],
                             'aberto'        => ['badge-amarelo',  '⏳ Em aberto'],
                             'rejeitado'     => ['badge-vermelho', '❌ Rejeitado'],
+                            'verificar'     => ['badge-vermelho', '⚠ Verificar produtos'],
                             'negativo'      => ['badge-vermelho', '✖ Verificar'],
                             'sem_movimento' => ['badge-cinza',    '— Sem movimento'],
                             default         => ['badge-cinza',    '—'],
@@ -599,7 +629,7 @@ $statusVenda   = verificarHorario('venda');
                 <tfoot>
                     <tr style="background:#eef0ff; font-weight:bold;">
                         <td>TOTAL GERAL</td>
-                        <td>
+                        <td style="text-align:center">
                             <?= $totalSaidas ?>
                             <?php if ($totalSaidasPend > 0): ?>
                                 <br><span style="font-weight:normal; font-size:10px; color:var(--cinza-texto)">
@@ -607,7 +637,7 @@ $statusVenda   = verificarHorario('venda');
                                 </span>
                             <?php endif; ?>
                         </td>
-                        <td>
+                        <td style="text-align:center">
                             <?= $totalRetornos ?>
                             <?php if ($totalRetornosPend > 0): ?>
                                 <br><span style="font-weight:normal; font-size:10px; color:var(--cinza-texto)">
@@ -615,8 +645,8 @@ $statusVenda   = verificarHorario('venda');
                                 </span>
                             <?php endif; ?>
                         </td>
-                        <td><?= $totalVendas ?></td>
-                        <td>
+                        <td style="text-align:center"><?= $totalVendas ?></td>
+                        <td style="text-align:center">
                             <span class="<?= classSaldo($totalSaldo) ?>"><?= $totalSaldo ?></span>
                         </td>
                         <td></td>

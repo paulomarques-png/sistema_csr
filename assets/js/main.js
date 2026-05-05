@@ -31,15 +31,21 @@ function fecharModal(id) {
     var m = document.getElementById(id);
     if (m) m.style.display = 'none';
 }
+
+// ESC fecha apenas modais que NÃO são persistentes
 document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
         document.querySelectorAll('.modal').forEach(function (m) {
+            if (m.dataset.persistent === 'true') return;
             m.style.display = 'none';
         });
     }
 });
+
+// Clique no overlay fecha apenas modais que NÃO são persistentes
 document.addEventListener('click', function (e) {
     if (e.target.classList.contains('modal')) {
+        if (e.target.dataset.persistent === 'true') return;
         e.target.style.display = 'none';
     }
 });

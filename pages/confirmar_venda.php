@@ -101,7 +101,64 @@ if (!$bloqueado
     }
 }
 
-// ── PROCESSAMENTO: Excluir pedido ───────────────────────────────
+// ── PROCESSAMENTO: Editar pedido ────────────────────────────────
+if (!$bloqueado
+    && $_SERVER['REQUEST_METHOD'] === 'POST'
+    && ($_POST['acao'] ?? '') === 'edit_pedido'
+) {
+    $pedidoEdit    = trim($_POST['pedido_edit']    ?? '');
+    $pedidoNovo    = trim($_POST['pedido_novo']    ?? '');
+    $vendedorId    = (int)($_POST['vendedor_id']   ?? 0);
+    $dataFiltro    = $_POST['data']                ?? date('Y-m-d');
+    $codigos       = $_POST['codigo']              ?? [];
+    $produtosArr   = $_POST['produto']             ?? [];
+    $quantidades   = $_POST['quantidade']          ?? [];
+    $obs           = trim($_POST['obs']            ?? '');
+
+    $itensEdit = [];
+    for ($i = 0; $i < count($codigos); $i++) {
+        $cod = trim($codigos[$i]     ?? '');
+        $prd = trim($produtosArr[$i] ?? '');
+        $qty = (int)($quantidades[$i] ?? 0);
+        if ($cod !== '' && $prd !== '' && $qty > 0) {
+            $itensEdit[] = ['codigo' => $cod, 'produto' => $prd, 'quantidade' => $qty];
+        }
+    }
+
+    if ($pedidoEdit && $vendedorId > 0 && !empty($itensEdit)) {
+        $stmtV2 = $pdo->prepare("SELECT nome FROM vendedores WHERE id = :id");
+        $stmtV2->execute([':id' => $vendedorId]);
+        $nomeVendEdit = $stmtV2->fetchColumn();
+
+        $agora2 = date('H:i:s');
+        $pdo->prepare("DELETE FROM reg_vendas WHERE vendedor_id=:vid AND data=:data AND pedido=:pedido")
+            ->execute([':vid' => $vendedorId, ':data' => $dataFiltro, ':pedido' => $pedidoEdit]);
+
+        $stmtIns2 = $pdo->prepare("
+            INSERT INTO reg_vendas (data, hora, vendedor_id, vendedor, codigo, produto, quantidade, pedido, obs)
+            VALUES (:data, :hora, :vid, :vendedor, :codigo, :produto, :quantidade, :pedido, :obs)
+        ");
+        foreach ($itensEdit as $item) {
+            $stmtIns2->execute([
+                ':data'       => $dataFiltro,
+                ':hora'       => $agora2,
+                ':vid'        => $vendedorId,
+                ':vendedor'   => $nomeVendEdit,
+                ':codigo'     => $item['codigo'],
+                ':produto'    => $item['produto'],
+                ':quantidade' => $item['quantidade'],
+                ':pedido'     => $pedidoNovo ?: $pedidoEdit,
+                ':obs'        => $obs,
+            ]);
+        }
+        registrarLog('VENDA_EDITADA',
+            "Pedido: $pedidoEdit | Vendedor: $nomeVendEdit | " . count($itensEdit) . " item(ns) | Data: $dataFiltro",
+            obterIP());
+        $msg = 'Pedido "' . ($pedidoNovo ?: $pedidoEdit) . '" atualizado com sucesso!';
+    }
+}
+
+
 if (!$bloqueado
     && $_SERVER['REQUEST_METHOD'] === 'POST'
     && ($_POST['acao'] ?? '') === 'del_pedido'
@@ -224,12 +281,7 @@ $totalSaldo   = $totalSaida - $totalRetorno - $totalVendido;
 <?php /* ── CONTEÚDO NORMAL ──────────────────────────────────── */ ?>
 <?php else: ?>
 
-    <?php if ($msg): ?>
-        <div class="alerta alerta-sucesso">✅ <?= esc($msg) ?></div>
-    <?php endif; ?>
-    <?php if ($erro): ?>
-        <div class="alerta alerta-erro">❌ <?= esc($erro) ?></div>
-    <?php endif; ?>
+    <?php /* Erro e msg são exibidos via modal flutuante no JS abaixo */ ?>
     <?php if ($statusHorario === 'manutencao'): ?>
         <div class="alerta alerta-aviso">⚙️ Operando em modo manutenção — restrições de horário ignoradas.</div>
     <?php elseif (in_array($_SESSION['usuario_perfil'], ['supervisor','master']) && $statusHorario === 'bloqueado'): ?>
@@ -241,7 +293,7 @@ $totalSaldo   = $totalSaida - $totalRetorno - $totalVendido;
         <form method="get" style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end">
             <div class="grupo-campo" style="flex:1; min-width:200px">
                 <label>Vendedor</label>
-                <select name="vendedor_id" class="campo" required onchange="this.form.submit()">
+                <select name="vendedor_id" class="campo" required>
                     <option value="">— Selecione —</option>
                     <?php foreach ($vendedores as $v): ?>
                         <option value="<?= $v['id'] ?>"
@@ -254,7 +306,7 @@ $totalSaldo   = $totalSaida - $totalRetorno - $totalVendido;
             <div class="grupo-campo" style="min-width:160px">
                 <label>Data</label>
                 <input type="date" name="data" class="campo"
-                       value="<?= esc($dataFiltro) ?>" onchange="this.form.submit()">
+                       value="<?= esc($dataFiltro) ?>">
             </div>
             <button type="submit" class="btn btn-secundario">🔍 Filtrar</button>
         </form>
@@ -365,25 +417,39 @@ $totalSaldo   = $totalSaida - $totalRetorno - $totalVendido;
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($pedidosLancados as $ped): ?>
+                    <?php foreach ($pedidosLancados as $ped):
+                        $stmtItens = $pdo->prepare("
+                            SELECT codigo, produto, quantidade, obs
+                            FROM reg_vendas
+                            WHERE vendedor_id = :vid AND data = :data AND pedido = :pedido
+                            ORDER BY id ASC
+                        ");
+                        $stmtItens->execute([':vid' => $vendedorId, ':data' => $dataFiltro, ':pedido' => $ped['pedido']]);
+                        $itensDoPedido = $stmtItens->fetchAll();
+                        $obsDoP    = htmlspecialchars($itensDoPedido[0]['obs'] ?? '', ENT_QUOTES);
+                        $itensJson = htmlspecialchars(json_encode(array_map(fn($i) => [
+                            'codigo'     => $i['codigo'],
+                            'produto'    => $i['produto'],
+                            'quantidade' => $i['quantidade'],
+                        ], $itensDoPedido)), ENT_QUOTES);
+                    ?>
                     <tr>
                         <td><strong><?= esc($ped['pedido']) ?></strong></td>
-                        <td style="font-size:13px; color:var(--cinza-texto); max-width:400px">
-                            <?= esc($ped['descricao']) ?>
-                        </td>
+                        <td class="td-obs"><?= esc($ped['descricao']) ?></td>
                         <td style="text-align:center"><?= $ped['total_itens'] ?></td>
                         <td style="text-align:center">
-                            <form method="post"
-                                  onsubmit="return confirm('Excluir o pedido \'<?= esc($ped['pedido']) ?>\'?')">
-                                <input type="hidden" name="acao"        value="del_pedido">
-                                <input type="hidden" name="vendedor_id" value="<?= $vendedorId ?>">
-                                <input type="hidden" name="data"        value="<?= $dataFiltro ?>">
-                                <input type="hidden" name="pedido_del"  value="<?= esc($ped['pedido']) ?>">
-                                <button type="submit" class="btn btn-vermelho"
-                                        style="padding:6px 14px; font-size:13px">
+                            <div style="display:flex; gap:6px; justify-content:center">
+                                <button type="button" class="btn btn-acento btn-pequeno btn-editar-pedido"
+                                        data-pedido="<?= esc($ped['pedido']) ?>"
+                                        data-itens="<?= $itensJson ?>"
+                                        data-obs="<?= $obsDoP ?>">
+                                    ✏️ Editar
+                                </button>
+                                <button type="button" class="btn btn-vermelho btn-pequeno"
+                                        onclick="confirmarExclusao('<?= esc(addslashes($ped['pedido'])) ?>')">
                                     🗑 Excluir
                                 </button>
-                            </form>
+                            </div>
                         </td>
                     </tr>
                     <?php endforeach; ?>
@@ -418,7 +484,8 @@ $totalSaldo   = $totalSaida - $totalRetorno - $totalVendido;
                     <label>Observação <small style="font-weight:normal">(opcional)</small></label>
                     <input type="text" name="obs" class="campo"
                            placeholder="Ex: Entrega parcial, cliente X..."
-                           maxlength="200">
+                           maxlength="200"
+                           value="<?= isset($_POST['obs']) && $erro ? esc($_POST['obs']) : '' ?>">
                 </div>
             </div>
 
@@ -449,6 +516,87 @@ $totalSaldo   = $totalSaida - $totalRetorno - $totalVendido;
 
 <?php endif; // bloqueado ?>
 
+<?php /* ── Modal flutuante de notificação (erro / sucesso) ──────── */ ?>
+<div id="modal-notif" class="modal" style="display:none">
+    <div class="modal-box" style="max-width:420px; text-align:center">
+        <div id="modal-notif-icone" style="font-size:36px; margin-bottom:8px"></div>
+        <h3 id="modal-notif-titulo" style="margin-bottom:8px"></h3>
+        <p id="modal-notif-msg" style="font-size:14px; color:var(--cinza-texto); margin-bottom:20px"></p>
+        <div style="display:flex; justify-content:center">
+            <button class="btn btn-primario" onclick="fecharModal('modal-notif')" style="padding: 10px 30px">OK</button>
+        </div>
+    </div>
+</div>
+
+<?php /* ── Modal: Confirmar exclusão ─────────────────────────── */ ?>
+<div id="modal-excluir" class="modal" style="display:none">
+    <div class="modal-box">
+        <h3>🗑 Confirmar Exclusão</h3>
+        <p>Tem certeza que deseja excluir o pedido <strong id="excluir-pedido-nome"></strong>?</p>
+        <p style="font-size:13px; color:var(--cinza-texto)">Esta ação não pode ser desfeita.</p>
+        <form method="post" id="form-excluir">
+            <input type="hidden" name="acao"        value="del_pedido">
+            <input type="hidden" name="vendedor_id" value="<?= $vendedorId ?>">
+            <input type="hidden" name="data"        value="<?= esc($dataFiltro) ?>">
+            <input type="hidden" name="pedido_del"  id="excluir-pedido-val">
+            <div class="modal-botoes">
+                <button type="submit" class="btn btn-vermelho">🗑 Sim, excluir</button>
+                <button type="button" class="btn btn-secundario"
+                        onclick="fecharModal('modal-excluir')">Cancelar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<?php /* ── Modal: Editar pedido ────────────────────────────────── */ ?>
+<div id="modal-editar" class="modal" style="display:none" data-persistent="true">
+    <div class="modal-box" style="max-width:680px; width:95%">
+        <h3>✏️ Editar Pedido</h3>
+
+        <?php /* Alerta inline — substitui modal-sobre-modal para erros de validação */ ?>
+        <div id="editar-alerta" class="alerta alerta-erro" style="display:none; margin-bottom:12px"></div>
+
+        <form method="post" id="form-editar" autocomplete="off">
+            <input type="hidden" name="acao"        value="edit_pedido">
+            <input type="hidden" name="vendedor_id" value="<?= $vendedorId ?>">
+            <input type="hidden" name="data"        value="<?= esc($dataFiltro) ?>">
+            <input type="hidden" name="pedido_edit" id="editar-pedido-original">
+
+            <div class="grupo-campo" style="max-width:320px">
+                <label>Nº do Pedido</label>
+                <input type="text" name="pedido_novo" id="editar-pedido-novo"
+                       class="campo" placeholder="Deixe em branco para manter o mesmo" maxlength="50">
+                <div id="editar-dup-aviso" class="alerta alerta-aviso" style="display:none; margin-top:6px; font-size:12px"></div>
+            </div>
+
+            <div style="margin-bottom:6px">
+                <label>Produtos <span style="color:red">*</span></label>
+            </div>
+            <div class="grade-header">
+                <div>Buscar produto</div>
+                <div>Produto selecionado</div>
+                <div style="text-align:center">Qtd</div>
+                <div></div>
+            </div>
+            <div id="grade-editar"></div>
+            <button type="button" onclick="adicionarLinhaEditar()" class="btn btn-secundario" style="margin-top:8px">
+                + Adicionar Produto
+            </button>
+
+            <div class="grupo-campo" style="margin-top:16px; max-width:500px">
+                <label>Observação</label>
+                <input type="text" name="obs" id="editar-obs" class="campo" maxlength="200">
+            </div>
+
+            <div class="modal-botoes">
+                <button type="submit" class="btn btn-primario">💾 Salvar Alterações</button>
+                <button type="button" class="btn btn-secundario"
+                        onclick="fecharModal('modal-editar')">Cancelar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 </main>
 
 <footer>
@@ -462,12 +610,13 @@ $totalSaldo   = $totalSaida - $totalRetorno - $totalVendido;
 <script>
 const BASE_URL = '<?= BASE_URL ?>';
 
-function criarLinhaHTML() {
+// ── Autocomplete de produtos (grade principal e grade de edição) ──
+function criarLinhaHTMLGen(gradeId) {
     return `
         <div class="grade-cel-busca">
             <input type="text" class="campo campo-busca"
                    placeholder="Digite o código ou nome..."
-                   oninput="buscarProduto(this)" autocomplete="off">
+                   oninput="buscarProdutoGen(this,'${gradeId}')" autocomplete="off">
             <div class="autocomplete-lista" style="display:none"></div>
         </div>
         <div class="grade-cel-produto">
@@ -478,25 +627,25 @@ function criarLinhaHTML() {
             <input type="number" name="quantidade[]" class="campo" min="1" placeholder="0">
         </div>
         <div class="grade-cel-acao">
-            <button type="button" onclick="removerLinha(this)"
-                    class="btn btn-vermelho" style="padding:8px 14px; font-size:16px" title="Remover">✕</button>
+            <button type="button" onclick="removerLinhaGen(this,'${gradeId}')"
+                    class="btn btn-vermelho" style="padding:8px 14px; font-size:16px">✕</button>
         </div>`;
 }
 
-function adicionarLinha() {
-    const grade = document.getElementById('grade-produtos');
-    if (grade.querySelectorAll('.grade-linha').length >= 20) {
-        alert('Máximo de 20 produtos por pedido.'); return;
+function adicionarLinhaGen(gradeId) {
+    const grade = document.getElementById(gradeId);
+    if (grade.querySelectorAll('.grade-linha').length >= 10) {
+        alert('Máximo de 10 produtos por pedido.'); return;
     }
     const div = document.createElement('div');
     div.className = 'grade-linha';
-    div.innerHTML = criarLinhaHTML();
+    div.innerHTML = criarLinhaHTMLGen(gradeId);
     grade.appendChild(div);
     div.querySelector('.campo-busca').focus();
 }
 
-function removerLinha(btn) {
-    const grade = document.getElementById('grade-produtos');
+function removerLinhaGen(btn, gradeId) {
+    const grade = document.getElementById(gradeId);
     if (grade.querySelectorAll('.grade-linha').length <= 1) {
         alert('Mantenha pelo menos um produto.'); return;
     }
@@ -504,7 +653,7 @@ function removerLinha(btn) {
 }
 
 let timerBusca = null;
-function buscarProduto(input) {
+function buscarProdutoGen(input, gradeId) {
     clearTimeout(timerBusca);
     const linha = input.closest('.grade-linha');
     const lista = linha.querySelector('.autocomplete-lista');
@@ -515,7 +664,7 @@ function buscarProduto(input) {
             .then(r => r.json())
             .then(produtos => {
                 lista.innerHTML = '';
-                if (produtos.length === 0) {
+                if (!produtos.length) {
                     lista.innerHTML = '<div class="ac-item ac-vazio">Nenhum produto encontrado.</div>';
                 } else {
                     produtos.forEach(p => {
@@ -523,7 +672,7 @@ function buscarProduto(input) {
                         item.className = 'ac-item';
                         item.innerHTML = '<strong>' + p.codigo + '</strong> — ' + p.descricao
                                        + (p.unidade ? ' <em>(' + p.unidade + ')</em>' : '');
-                        item.addEventListener('click', () => selecionarProduto(linha, p));
+                        item.addEventListener('click', () => selecionarProdutoGen(linha, p));
                         lista.appendChild(item);
                     });
                 }
@@ -532,10 +681,10 @@ function buscarProduto(input) {
     }, 300);
 }
 
-function selecionarProduto(linha, produto) {
-    linha.querySelector('.campo-busca').value      = produto.codigo + ' — ' + produto.descricao;
-    linha.querySelector('[name="produto[]"]').value = produto.descricao;
-    linha.querySelector('[name="codigo[]"]').value  = produto.codigo;
+function selecionarProdutoGen(linha, produto) {
+    linha.querySelector('.campo-busca').value       = produto.codigo + ' — ' + produto.descricao;
+    linha.querySelector('[name="produto[]"]').value  = produto.descricao;
+    linha.querySelector('[name="codigo[]"]').value   = produto.codigo;
     linha.querySelector('.autocomplete-lista').style.display = 'none';
     linha.querySelector('[name="quantidade[]"]').focus();
 }
@@ -545,23 +694,218 @@ document.addEventListener('click', e => {
         document.querySelectorAll('.autocomplete-lista').forEach(l => l.style.display = 'none');
 });
 
-const formVenda = document.getElementById('form-venda');
-if (formVenda) {
-    formVenda.addEventListener('submit', function(e) {
-        let valido = false;
-        document.querySelectorAll('#grade-produtos .grade-linha').forEach(linha => {
-            const cod = linha.querySelector('[name="codigo[]"]').value;
-            const qty = parseInt(linha.querySelector('[name="quantidade[]"]').value) || 0;
-            if (cod && qty > 0) valido = true;
-        });
-        if (!valido) {
-            e.preventDefault();
-            alert('Adicione pelo menos um produto com código e quantidade válidos.');
+// ── Grade principal ───────────────────────────────────────────────
+<?php if ($vendedorId > 0): ?>
+function adicionarLinha() { adicionarLinhaGen('grade-produtos'); }
+function removerLinha(btn) { removerLinhaGen(btn, 'grade-produtos'); }
+function buscarProduto(input) { buscarProdutoGen(input, 'grade-produtos'); }
+
+// Repopula a grade com os itens que vieram do POST (quando há erro)
+<?php
+$itensPost = [];
+if ($erro && !empty($_POST['codigo'])) {
+    $codPost = $_POST['codigo']    ?? [];
+    $prdPost = $_POST['produto']   ?? [];
+    $qtyPost = $_POST['quantidade'] ?? [];
+    for ($i = 0; $i < count($codPost); $i++) {
+        $c = trim($codPost[$i] ?? '');
+        $p = trim($prdPost[$i] ?? '');
+        $q = (int)($qtyPost[$i] ?? 0);
+        if ($c && $p && $q > 0) {
+            $itensPost[] = ['codigo' => $c, 'produto' => $p, 'quantidade' => $q];
         }
+    }
+}
+?>
+const _itensPost = <?= json_encode($itensPost) ?>;
+
+document.addEventListener('DOMContentLoaded', function() {
+    if (_itensPost.length > 0) {
+        _itensPost.forEach(function(item) {
+            adicionarLinha();
+            const linhas = document.querySelectorAll('#grade-produtos .grade-linha');
+            const ultima = linhas[linhas.length - 1];
+            ultima.querySelector('.campo-busca').value          = item.codigo + ' — ' + item.produto;
+            ultima.querySelector('[name="produto[]"]').value    = item.produto;
+            ultima.querySelector('[name="codigo[]"]').value     = item.codigo;
+            ultima.querySelector('[name="quantidade[]"]').value = item.quantidade;
+        });
+    } else {
+        adicionarLinha();
+    }
+});
+
+// Verificação de pedido duplicado ao sair do campo
+const campoPedido = document.querySelector('[name="pedido"]');
+if (campoPedido) {
+    campoPedido.addEventListener('blur', function() {
+        const val = this.value.trim();
+        if (!val) return;
+        verificarPedidoDuplicado(val, <?= $vendedorId ?>, '<?= esc($dataFiltro) ?>', 'dup-aviso', null);
     });
 }
 
-adicionarLinha();
+document.getElementById('form-venda').addEventListener('submit', function(e) {
+    let valido = false;
+    let semQtd = false;
+
+    document.querySelectorAll('#grade-produtos .grade-linha').forEach(linha => {
+        const cod = linha.querySelector('[name="codigo[]"]').value.trim();
+        const qty = parseInt(linha.querySelector('[name="quantidade[]"]').value) || 0;
+        if (cod && qty > 0) valido = true;
+        if (cod && qty <= 0) semQtd = true;
+    });
+
+    if (semQtd) {
+        e.preventDefault();
+        document.getElementById('modal-notif-icone').textContent  = '⚠️';
+        document.getElementById('modal-notif-titulo').textContent = 'Quantidade inválida';
+        document.getElementById('modal-notif-msg').textContent    = 'Um ou mais produtos estão sem quantidade. Preencha antes de salvar.';
+        abrirModal('modal-notif');
+        return;
+    }
+
+    if (!valido) {
+        e.preventDefault();
+        document.getElementById('modal-notif-icone').textContent  = '⚠️';
+        document.getElementById('modal-notif-titulo').textContent = 'Nenhum produto';
+        document.getElementById('modal-notif-msg').textContent    = 'Adicione pelo menos um produto com código e quantidade válidos.';
+        abrirModal('modal-notif');
+    }
+});
+<?php endif; ?>
+
+// ── Modal de notificação (erro/sucesso PHP) ───────────────────────
+<?php if ($erro): ?>
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('modal-notif-icone').textContent = '❌';
+    document.getElementById('modal-notif-titulo').textContent = 'Atenção';
+    document.getElementById('modal-notif-msg').textContent = <?= json_encode($erro) ?>;
+    abrirModal('modal-notif');
+});
+<?php elseif ($msg): ?>
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('modal-notif-icone').textContent = '✅';
+    document.getElementById('modal-notif-titulo').textContent = 'Sucesso';
+    document.getElementById('modal-notif-msg').textContent = <?= json_encode($msg) ?>;
+    abrirModal('modal-notif');
+});
+<?php endif; ?>
+
+// ── Botões Editar via data-attributes (evita JSON inline no onclick) ─
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.btn-editar-pedido').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const pedido = this.dataset.pedido;
+            const itens  = JSON.parse(this.dataset.itens || '[]');
+            const obs    = this.dataset.obs || '';
+            abrirModalEditar(pedido, itens, obs);
+        });
+    });
+});
+
+// ── Fix #1: Modal de exclusão ─────────────────────────────────────
+function confirmarExclusao(pedido) {
+    document.getElementById('excluir-pedido-nome').textContent = '"' + pedido + '"';
+    document.getElementById('excluir-pedido-val').value = pedido;
+    abrirModal('modal-excluir');
+}
+
+// ── Fix #1: Modal de edição ───────────────────────────────────────
+function adicionarLinhaEditar() { adicionarLinhaGen('grade-editar'); }
+
+function abrirModalEditar(pedido, itens, obs) {
+    document.getElementById('editar-pedido-original').value = pedido;
+    document.getElementById('editar-pedido-novo').value     = '';
+    document.getElementById('editar-obs').value             = obs || '';
+    document.getElementById('editar-dup-aviso').style.display  = 'none';
+    document.getElementById('editar-alerta').style.display     = 'none'; // limpa erro anterior
+
+    // Limpa e preenche a grade com os itens do pedido
+    const grade = document.getElementById('grade-editar');
+    grade.innerHTML = '';
+    if (!itens || !itens.length) {
+        adicionarLinhaEditar();
+    } else {
+        itens.forEach(item => {
+            adicionarLinhaEditar();
+            const linhas = grade.querySelectorAll('.grade-linha');
+            const ultima = linhas[linhas.length - 1];
+            ultima.querySelector('.campo-busca').value          = item.codigo + ' — ' + item.produto;
+            ultima.querySelector('[name="produto[]"]').value    = item.produto;
+            ultima.querySelector('[name="codigo[]"]').value     = item.codigo;
+            ultima.querySelector('[name="quantidade[]"]').value = item.quantidade;
+        });
+    }
+
+    abrirModal('modal-editar');
+}
+
+// Verifica duplicidade ao alterar o nº do pedido no modal de edição
+document.getElementById('editar-pedido-novo')?.addEventListener('blur', function() {
+    const val      = this.value.trim();
+    const original = document.getElementById('editar-pedido-original').value;
+    if (!val || val === original) {
+        document.getElementById('editar-dup-aviso').style.display = 'none';
+        return;
+    }
+    verificarPedidoDuplicado(val, <?= $vendedorId ?>, '<?= esc($dataFiltro) ?>', 'editar-dup-aviso', original);
+});
+
+document.getElementById('form-editar')?.addEventListener('submit', function(e) {
+    let valido = false;
+    let semQtd = false;
+    const alertaEl = document.getElementById('editar-alerta');
+
+    document.querySelectorAll('#grade-editar .grade-linha').forEach(linha => {
+        const cod = linha.querySelector('[name="codigo[]"]').value.trim();
+        const qty = parseInt(linha.querySelector('[name="quantidade[]"]').value) || 0;
+        if (cod && qty > 0) valido = true;
+        if (cod && qty <= 0) semQtd = true;
+    });
+
+    const mostrarErroInline = (msg) => {
+        alertaEl.textContent = '⚠️ ' + msg;
+        alertaEl.style.display = 'block';
+        alertaEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    };
+
+    if (semQtd) {
+        e.preventDefault();
+        mostrarErroInline('Um ou mais produtos estão sem quantidade. Preencha antes de salvar.');
+        return;
+    }
+    if (!valido) {
+        e.preventDefault();
+        mostrarErroInline('Adicione pelo menos um produto com código e quantidade válidos.');
+        return;
+    }
+
+    // Limpa alerta se tudo ok
+    alertaEl.style.display = 'none';
+});
+
+// ── Fix #2: Verificação AJAX de pedido duplicado ──────────────────
+function verificarPedidoDuplicado(numeroPedido, vendedorId, data, avisoElId, pedidoIgnorar) {
+    fetch(BASE_URL + '/api/verificar_pedido.php'
+        + '?pedido='   + encodeURIComponent(numeroPedido)
+        + '&vid='      + encodeURIComponent(vendedorId)
+        + '&data='     + encodeURIComponent(data)
+        + (pedidoIgnorar ? '&ignorar=' + encodeURIComponent(pedidoIgnorar) : '')
+    )
+    .then(r => r.json())
+    .then(data => {
+        const el = document.getElementById(avisoElId);
+        if (!el) return;
+        if (data.existe) {
+            el.innerHTML = '⚠️ ' + data.msg;
+            el.style.display = 'block';
+        } else {
+            el.style.display = 'none';
+        }
+    })
+    .catch(() => {});
+}
 </script>
 
 </body>

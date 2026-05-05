@@ -311,8 +311,36 @@ foreach ($st_tok->fetchAll(PDO::FETCH_ASSOC) as $r) {
         ];
     }
 }
+// ── Pendências de dias anteriores — independente do filtro ──────
+// Mesma lógica do dashboard: saldo confirmado > 0 em dias anteriores a hoje
+function buscarPendenciasRelatorio(PDO $pdo): array
+{
+    $hoje = date('Y-m-d');
+    $stmt = $pdo->query("
+        SELECT
+            v.id AS vendedor_id,
+            v.nome,
+            s.data,
+            (
+                COALESCE((SELECT SUM(q.quantidade)  FROM reg_saidas   q  WHERE q.vendedor_id  = v.id AND q.data = s.data AND q.confirmado = 1 AND q.rejeitado = 0), 0) -
+                COALESCE((SELECT SUM(r.quantidade)  FROM reg_retornos r  WHERE r.vendedor_id  = v.id AND r.data = s.data AND r.confirmado = 1 AND r.rejeitado = 0), 0) -
+                COALESCE((SELECT SUM(vd.quantidade) FROM reg_vendas   vd WHERE vd.vendedor_id = v.id AND vd.data = s.data), 0)
+            ) AS saldo
+        FROM vendedores v
+        INNER JOIN reg_saidas s ON s.vendedor_id = v.id AND s.confirmado = 1 AND s.rejeitado = 0
+        WHERE s.data < '$hoje'
+        GROUP BY v.id, v.nome, s.data
+        HAVING saldo > 0
+        ORDER BY s.data ASC, v.nome ASC
+    ");
+    return $stmt->fetchAll();
+}
+$pendenciasAnteriores = buscarPendenciasRelatorio($pdo);
 
-$dados = array_filter($dados, fn($v) => $v['tem_pendencia'] || $v['tem_pend_nao_conf'] || $v['tem_rejeitado']);
+// Filtro apenas pendências
+if ($so_pend) {
+    $dados = array_filter($dados, fn($v) => $v['tem_pendencia'] || $v['tem_pend_nao_conf'] || $v['tem_rejeitado']);
+}
 
 // Ordenação: negativos → pendentes (saldo) → rejeitados → pend não conf → com movimento → sem movimento → alfa
 uasort($dados, function ($a, $b) {
@@ -325,6 +353,12 @@ uasort($dados, function ($a, $b) {
     if ($a['tem_movimento']     !== $b['tem_movimento'])     return $b['tem_movimento']     <=> $a['tem_movimento'];
     return strcmp($a['nome'], $b['nome']);
 });
+
+// Filtro explícito por vendedor — garante que só o vendedor selecionado apareça na tabela
+if ($vid_filtro && is_numeric($vid_filtro)) {
+    $filtroVid = (int)$vid_filtro;
+    $dados = array_filter($dados, fn($k) => $k === $filtroVid, ARRAY_FILTER_USE_KEY);
+}
 
 // Totais gerais
 $g_saida         = array_sum(array_column($dados, 'tot_saida'));
@@ -352,9 +386,11 @@ $csv_qs = http_build_query([
 ]);
 
 // ── Helpers ──────────────────────────────────────────────────────
-function badgeStatus(int $saldo, bool $mov, bool $temPendNaoConf = false, bool $temRejeitado = false): string {
-    if (!$mov && !$temPendNaoConf && !$temRejeitado) return '<span class="badge badge-cinza">— Sem movimento</span>';
+function badgeStatus(int $saldo, bool $mov, bool $temPendNaoConf = false, bool $temRejeitado = false, bool $temPendencia = false): string {
+    if (!$mov && !$temPendNaoConf && !$temRejeitado && !$temPendencia) return '<span class="badge badge-cinza">— Sem movimento</span>';
     if ($temRejeitado) return '<span class="badge badge-vermelho">❌ Rejeitado</span>';
+    // Saldo global zerado mas produtos individuais desequilibrados — falso positivo
+    if ($saldo === 0 && $temPendencia) return '<span class="badge badge-vermelho">⚠ Verificar produtos</span>';
     if ($saldo === 0 && !$temPendNaoConf) return '<span class="badge badge-verde">✓ Zerado</span>';
     if ($saldo === 0 && $temPendNaoConf)  return '<span class="badge badge-amarelo">⏳ Aguard. QR</span>';
     if ($saldo > 0) return '<span class="badge badge-amarelo">⚠ Em aberto</span>';
@@ -388,8 +424,10 @@ function badgeTipo(string $tipo, string $statusConf = 'confirmado'): string {
         default   => '<span class="badge badge-cinza">' . htmlspecialchars($tipo) . '</span>',
     };
 }
-function classeLinha(int $saldo, bool $mov): string {
-    if (!$mov || $saldo === 0) return '';
+function classeLinha(int $saldo, bool $mov, bool $temPendencia = false): string {
+    if (!$mov) return '';
+    if ($saldo === 0 && $temPendencia) return 'linha-negativo'; // falso zero — produtos desequilibrados
+    if ($saldo === 0) return '';
     return $saldo > 0 ? 'linha-aberto' : 'linha-negativo';
 }
 function classeSaldo(int $saldo): string {
@@ -419,6 +457,34 @@ $colgroup = '<colgroup>
     <col style="width:14%"><col style="width:30%"><col style="width:14%">
 </colgroup>';
 ?>
+
+<?php /* ── Pendências de dias anteriores — independente do filtro ── */ ?>
+<?php if (!empty($pendenciasAnteriores)): ?>
+<div class="alerta alerta-aviso dash-alerta-pendencias" style="margin-bottom:12px">
+    <span class="dash-alerta-icone">⚠️</span>
+    <div class="dash-alerta-corpo">
+        <strong><?= count($pendenciasAnteriores) ?> pendência(s) de dias anteriores:</strong>
+        <ul class="dash-pendencias-lista">
+            <?php foreach ($pendenciasAnteriores as $p):
+                $urlPend = BASE_URL . '/pages/relatorios.php'
+                    . '?data_ini='    . urlencode($p['data'])
+                    . '&data_fim='    . urlencode($p['data'])
+                    . '&vendedor_id=' . urlencode($p['vendedor_id']);
+            ?>
+            <li>
+                <strong><?= esc($p['nome']) ?></strong>
+                — <?= formatarData($p['data']) ?>
+                — Saldo: <strong><?= $p['saldo'] ?></strong> itens em aberto
+                <a href="<?= $urlPend ?>" class="dash-pendencia-link" target="_blank"
+                   title="Ver relatório filtrado para este dia">
+                    📊 Ver detalhe →
+                </a>
+            </li>
+            <?php endforeach; ?>
+        </ul>
+    </div>
+</div>
+<?php endif; ?>
 
 <?php if ($totalCardsQR > 0): ?>
 <div class="card dash-card-qr" style="margin-bottom:16px">
@@ -467,7 +533,7 @@ $colgroup = '<colgroup>
                         <td style="text-align:center"><?= formatarData($tk['data_ref']) ?></td>
                         <td style="font-size:13px; color:var(--cinza-texto); font-style:italic">Aguarda correção do operador</td>
                         <td style="text-align:center">
-                            <a href="<?= $url ?>" class="btn btn-vermelho btn-pequeno">✏️ Corrigir</a>
+                            <a href="<?= $url ?>" class="btn btn-vermelho btn-pequeno" target="_blank">✏️ Corrigir</a>
                         </td>
                     </tr>
                     <?php endforeach; endforeach; ?>
@@ -502,7 +568,7 @@ $colgroup = '<colgroup>
                         <td style="text-align:center"><?= formatarData($tk['data_ref']) ?></td>
                         <td style="text-align:center; font-size:13px; color:var(--cinza-texto)"><?= formatarDataHora($tk['expira_em']) ?></td>
                         <td style="text-align:center">
-                            <a href="<?= $url ?>" class="btn btn-acento btn-pequeno">📲 Reenviar QR</a>
+                            <a href="<?= $url ?>" class="btn btn-acento btn-pequeno" target="_blank">📲 Reenviar QR</a>
                         </td>
                     </tr>
                     <?php endforeach; endforeach; ?>
@@ -540,7 +606,7 @@ $colgroup = '<colgroup>
                         <td style="text-align:center"><?= formatarData($tk['data_ref']) ?></td>
                         <td style="text-align:center; font-size:13px; color:var(--cinza-texto)"><?= formatarDataHora($tk['expira_em']) ?></td>
                         <td style="text-align:center">
-                            <a href="<?= $url ?>" class="btn btn-secundario btn-pequeno">🔁 Reenviar QR</a>
+                            <a href="<?= $url ?>" class="btn btn-secundario btn-pequeno" target="_blank">🔁 Reenviar QR</a>
                         </td>
                     </tr>
                     <?php endforeach; endforeach; ?>
@@ -712,11 +778,13 @@ $colgroup = '<colgroup>
 
         <?php foreach ($dados as $vid => $vend): ?>
 
-        <tr class="<?= classeLinha($vend['saldo'], $vend['tem_movimento']) ?>" id="row-<?= (int)$vid ?>">
+        <tr class="<?= classeLinha($vend['saldo'], $vend['tem_movimento'], $vend['tem_pendencia']) ?>" id="row-<?= (int)$vid ?>">
             <td>
                 <strong><?= esc($vend['nome']) ?></strong>
                 <?php if ($vend['saldo'] < 0): ?>
                     <span class="aviso-negativo">⚠ Saldo negativo — verificar</span>
+                <?php elseif ($vend['saldo'] === 0 && $vend['tem_pendencia']): ?>
+                    <span class="aviso-negativo">⚠ Produtos desequilibrados — ver detalhe</span>
                 <?php endif; ?>
             </td>
             <td class="col-num">
@@ -769,7 +837,7 @@ $colgroup = '<colgroup>
                 <?php endif; ?>
             </td>
             <td class="col-num">
-                <?= badgeStatus($vend['saldo'], $vend['tem_movimento'], $vend['tem_pend_nao_conf'], $vend['tem_rejeitado']) ?>
+                <?= badgeStatus($vend['saldo'], $vend['tem_movimento'], $vend['tem_pend_nao_conf'], $vend['tem_rejeitado'], $vend['tem_pendencia']) ?>
             </td>
             <td class="col-acao">
                 <?php if ($vend['tem_movimento'] || $vend['tem_pend_nao_conf'] || $vend['tem_rejeitado']): ?>
@@ -812,7 +880,7 @@ $colgroup = '<colgroup>
                                 $pPend    = $prod['pend_saida'] + $prod['pend_retorno'];
                                 $pRej     = $prod['rej_saida']  + $prod['rej_retorno'];
                         ?>
-                        <tr class="<?= classeLinha($prod['saldo'], true) ?>">
+                        <tr class="<?= classeLinha($prod['saldo'], true, $prod['saldo'] !== 0) ?>">
                             <td><code class="cod"><?= esc($cod) ?></code></td>
                             <td><?= esc($prod['produto']) ?></td>
                             <td class="col-num">
@@ -1006,12 +1074,19 @@ document.addEventListener('click', function() {
 });
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Auto-expande vendedores com saldo negativo
+    // Auto-expande vendedores com saldo negativo ou produtos desequilibrados
     <?php foreach ($dados as $vid => $vend): ?>
-    <?php if ($vend['tem_pendencia'] && $vend['saldo'] < 0): ?>
+    <?php if ($vend['tem_pendencia']): ?>
     toggleDetalhe(<?= (int)$vid ?>);
     <?php endif; ?>
     <?php endforeach; ?>
+
+    // Fix #5: restaura posição de scroll após filtrar
+    var savedScroll = sessionStorage.getItem('rel_scroll');
+    if (savedScroll) {
+        window.scrollTo(0, parseInt(savedScroll));
+        sessionStorage.removeItem('rel_scroll');
+    }
 });
 
 document.querySelector('.rel-filtros').addEventListener('submit', function(e) {
@@ -1020,7 +1095,10 @@ document.querySelector('.rel-filtros').addEventListener('submit', function(e) {
     if (ini && fim && fim < ini) {
         alert('⚠ A data fim não pode ser anterior à data início.');
         e.preventDefault();
+        return;
     }
+    // Salva posição atual antes de recarregar
+    sessionStorage.setItem('rel_scroll', window.scrollY);
 });
 </script>
 
