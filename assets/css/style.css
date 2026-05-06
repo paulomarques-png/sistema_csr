@@ -1860,3 +1860,194 @@ tr.audit-linha-retroativa:hover td {
     margin: 14px -20px 0 -20px;
     border-top: 2px dashed rgba(0,0,0,.08);
 }
+
+/* ================================================================
+   QR Code — Página de confirmação do vendedor (qr/confirmar.php)
+   ================================================================ */
+
+/* ── Página de erro (inválido / expirado) ────────────────────── */
+.qr-erro-body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: var(--qr-cor-clara, #fff0f0);
+}
+.qr-erro-card {
+    background: white;
+    border-radius: 20px;
+    padding: 48px 40px 40px;
+    max-width: 420px;
+    width: 100%;
+    text-align: center;
+    border: 1.5px solid var(--qr-cor-borda, #f5c6cb);
+    box-shadow: 0 8px 40px rgba(0,0,0,.10);
+    animation: qr-surgir .5s cubic-bezier(.34,1.56,.64,1) both;
+}
+@keyframes qr-surgir {
+    from { opacity: 0; transform: translateY(24px) scale(.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.qr-erro-ilustracao {
+    width: 100%;
+    max-width: 320px;
+    margin: 0 auto 28px;
+    display: block;
+}
+.qr-erro-badge {
+    display: inline-block;
+    background: var(--qr-cor-clara, #fff0f0);
+    color: var(--qr-cor, #DC3545);
+    border: 1.5px solid var(--qr-cor-borda, #f5c6cb);
+    border-radius: 20px;
+    padding: 4px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    margin-bottom: 14px;
+}
+.qr-erro-titulo {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--qr-cor, #DC3545);
+    margin-bottom: 10px;
+    line-height: 1.2;
+}
+.qr-erro-subtitulo {
+    font-size: 14px;
+    color: #555;
+    line-height: 1.6;
+    margin-bottom: 24px;
+}
+.qr-erro-dica {
+    background: var(--qr-cor-clara, #fff0f0);
+    border: 1px solid var(--qr-cor-borda, #f5c6cb);
+    border-radius: 12px;
+    padding: 14px 18px;
+    font-size: 13px;
+    color: var(--qr-cor, #DC3545);
+    font-weight: 500;
+    line-height: 1.5;
+    margin-bottom: 28px;
+}
+.qr-erro-dica::before { content: '💡 '; }
+.qr-erro-rodape {
+    font-size: 11px;
+    color: #aaa;
+    margin-top: 8px;
+}
+.qr-fechar-aviso {
+    font-size: 12px;
+    color: #aaa;
+    margin-top: 12px;
+}
+
+/* ── Página principal de confirmação ─────────────────────────── */
+.qr-topo {
+    background: var(--primaria);
+    color: white;
+    padding: 16px 20px;
+    text-align: center;
+}
+.qr-topo h1 { font-size: 18px; }
+.qr-topo p  { font-size: 13px; opacity: .8; margin-top: 4px; }
+
+.qr-caixa {
+    background: white;
+    border-radius: 12px;
+    margin: 16px;
+    padding: 20px;
+    box-shadow: 0 2px 12px rgba(0,0,0,.1);
+}
+
+.qr-info-vendedor {
+    font-size: 15px;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #eee;
+}
+.qr-info-vendedor strong { color: var(--primaria); font-size: 18px; }
+.qr-info-vendedor-tipo { color: #666; }
+.qr-itens-intro { font-size: 13px; color: #666; margin-bottom: 8px; }
+
+.qr-table { width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 20px; }
+.qr-table th { background: var(--primaria); color: white; padding: 10px 8px; text-align: left; }
+.qr-table .th-qtd { text-align: center; width: 60px; }
+.qr-table td { padding: 10px 8px; border-bottom: 1px solid #f0f0f0; }
+.qr-table .td-qtd { text-align: center; font-weight: bold; font-size: 18px; }
+.qr-cod-item { color: #888; }
+
+.qr-alerta { padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; font-weight: 500; }
+.qr-alerta-erro    { background: #fff0f0; color: var(--vermelho); border-left: 4px solid var(--vermelho); }
+.qr-alerta-sucesso { background: #f0fff4; color: var(--verde);    border-left: 4px solid var(--verde); }
+
+.qr-label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #444; }
+.qr-campo {
+    width: 100%; padding: 14px 16px;
+    border: 2px solid #ddd; border-radius: 10px;
+    font-size: 18px; text-align: center;
+    letter-spacing: 4px; margin-bottom: 12px;
+    transition: border-color .2s;
+}
+.qr-campo:focus { outline: none; border-color: var(--acento); }
+.qr-dica-campo { color: #888; font-size: 12px; }
+.qr-divisor { border: none; border-top: 1px solid #eee; margin: 16px 0; }
+
+.qr-acoes { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
+.btn-qr-confirmar {
+    width: 100%; padding: 16px;
+    background: var(--verde); color: white;
+    border: none; border-radius: 10px;
+    font-size: 18px; font-weight: bold;
+    cursor: pointer; transition: filter .2s;
+}
+.btn-qr-confirmar:hover { filter: brightness(1.1); }
+.btn-qr-rejeitar {
+    width: 100%; padding: 14px;
+    background: white; color: var(--vermelho);
+    border: 2px solid var(--vermelho); border-radius: 10px;
+    font-size: 15px; font-weight: bold;
+    cursor: pointer; transition: background .2s, color .2s;
+}
+.btn-qr-rejeitar:hover { background: var(--vermelho); color: white; }
+
+/* ── Resultado (confirmado / rejeitado) ─────────────────────── */
+.qr-resultado { text-align: center; padding: 32px 20px; }
+.qr-resultado-icone { font-size: 64px; }
+.qr-resultado h2 { margin: 12px 0 8px; font-size: 22px; }
+.qr-resultado p { color: #555; font-size: 15px; }
+.qr-resultado-confirmado h2 { color: var(--verde); }
+.qr-resultado-rejeitado h2  { color: var(--vermelho); }
+.qr-resultado-info  { font-size: 13px; color: #999; margin-top: 10px; }
+.qr-resultado-fechar { font-size: 14px; color: #888; margin-top: 16px; }
+
+/* ── Modal de rejeição ──────────────────────────────────────── */
+.qr-modal-rejeicao {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,.5);
+    align-items: flex-end; justify-content: center;
+    z-index: 100;
+}
+.qr-modal-rejeicao.aberto { display: flex; }
+.qr-modal-box {
+    background: white;
+    border-radius: 16px 16px 0 0;
+    padding: 24px 20px;
+    width: 100%; max-width: 480px;
+}
+.qr-modal-box h3 { color: var(--vermelho); margin-bottom: 8px; }
+.qr-modal-box p  { font-size: 14px; color: #555; margin-bottom: 16px; }
+.qr-modal-acoes { display: flex; flex-direction: column; gap: 10px; }
+.btn-qr-sim-rejeitar {
+    padding: 14px; background: var(--vermelho); color: white;
+    border: none; border-radius: 10px;
+    font-size: 16px; font-weight: bold; cursor: pointer;
+}
+.btn-qr-cancelar {
+    padding: 12px; background: #eee; color: #333;
+    border: none; border-radius: 10px;
+    font-size: 15px; cursor: pointer;
+}
