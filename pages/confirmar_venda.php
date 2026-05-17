@@ -59,12 +59,13 @@ if (!$bloqueado
             $erro = 'Adicione pelo menos um produto com quantidade válida.';
         } else {
             $stmtChk = $pdo->prepare("
-                SELECT COUNT(*) FROM reg_vendas
-                WHERE vendedor_id = :vid AND data = :data AND pedido = :pedido
+            SELECT vendedor, data FROM reg_vendas WHERE pedido = :pedido LIMIT 1
             ");
-            $stmtChk->execute([':vid' => $vendedorId, ':data' => $dataFiltro, ':pedido' => $pedidoNum]);
-            if ($stmtChk->fetchColumn() > 0) {
-                $erro = "O pedido \"$pedidoNum\" já foi lançado para este vendedor nesta data.";
+            $stmtChk->execute([':pedido' => $pedidoNum]);
+            $dupRow = $stmtChk->fetch();
+            if ($dupRow) {
+                $erro = "O pedido \"$pedidoNum\" já foi lançado para {$dupRow['vendedor']}"
+                    . " em " . date('d/m/Y', strtotime($dupRow['data'])) . ".";
             }
         }
     }
@@ -130,31 +131,47 @@ if (!$bloqueado
         $stmtV2->execute([':id' => $vendedorId]);
         $nomeVendEdit = $stmtV2->fetchColumn();
 
-        $agora2 = date('H:i:s');
-        $pdo->prepare("DELETE FROM reg_vendas WHERE vendedor_id=:vid AND data=:data AND pedido=:pedido")
-            ->execute([':vid' => $vendedorId, ':data' => $dataFiltro, ':pedido' => $pedidoEdit]);
-
-        $stmtIns2 = $pdo->prepare("
-            INSERT INTO reg_vendas (data, hora, vendedor_id, vendedor, codigo, produto, quantidade, pedido, obs)
-            VALUES (:data, :hora, :vid, :vendedor, :codigo, :produto, :quantidade, :pedido, :obs)
+        // ✅ Verifica duplicata global ignorando o próprio pedido original
+        $pedidoFinal = $pedidoNovo ?: $pedidoEdit;
+        $stmtChkEdit = $pdo->prepare("
+            SELECT vendedor, data FROM reg_vendas
+            WHERE pedido = :pedido AND pedido != :ignorar
+            LIMIT 1
         ");
-        foreach ($itensEdit as $item) {
-            $stmtIns2->execute([
-                ':data'       => $dataFiltro,
-                ':hora'       => $agora2,
-                ':vid'        => $vendedorId,
-                ':vendedor'   => $nomeVendEdit,
-                ':codigo'     => $item['codigo'],
-                ':produto'    => $item['produto'],
-                ':quantidade' => $item['quantidade'],
-                ':pedido'     => $pedidoNovo ?: $pedidoEdit,
-                ':obs'        => $obs,
-            ]);
+        $stmtChkEdit->execute([':pedido' => $pedidoFinal, ':ignorar' => $pedidoEdit]);
+        $dupEdit = $stmtChkEdit->fetch();
+        if ($dupEdit) {
+            $erro = "O pedido \"$pedidoFinal\" já foi lançado para {$dupEdit['vendedor']}"
+                . " em " . date('d/m/Y', strtotime($dupEdit['data'])) . ".";
         }
-        registrarLog('VENDA_EDITADA',
-            "Pedido: $pedidoEdit | Vendedor: $nomeVendEdit | " . count($itensEdit) . " item(ns) | Data: $dataFiltro",
-            obterIP());
-        $msg = 'Pedido "' . ($pedidoNovo ?: $pedidoEdit) . '" atualizado com sucesso!';
+
+        if (empty($erro)) {
+            $agora2 = date('H:i:s');
+            $pdo->prepare("DELETE FROM reg_vendas WHERE vendedor_id=:vid AND data=:data AND pedido=:pedido")
+                ->execute([':vid' => $vendedorId, ':data' => $dataFiltro, ':pedido' => $pedidoEdit]);
+
+            $stmtIns2 = $pdo->prepare("
+                INSERT INTO reg_vendas (data, hora, vendedor_id, vendedor, codigo, produto, quantidade, pedido, obs)
+                VALUES (:data, :hora, :vid, :vendedor, :codigo, :produto, :quantidade, :pedido, :obs)
+            ");
+            foreach ($itensEdit as $item) {
+                $stmtIns2->execute([
+                    ':data'       => $dataFiltro,
+                    ':hora'       => $agora2,
+                    ':vid'        => $vendedorId,
+                    ':vendedor'   => $nomeVendEdit,
+                    ':codigo'     => $item['codigo'],
+                    ':produto'    => $item['produto'],
+                    ':quantidade' => $item['quantidade'],
+                    ':pedido'     => $pedidoFinal,
+                    ':obs'        => $obs,
+                ]);
+            }
+            registrarLog('VENDA_EDITADA',
+                "Pedido: $pedidoEdit | Vendedor: $nomeVendEdit | " . count($itensEdit) . " item(ns) | Data: $dataFiltro",
+                obterIP());
+            $msg = 'Pedido "' . $pedidoFinal . '" atualizado com sucesso!';
+        }
     }
 }
 

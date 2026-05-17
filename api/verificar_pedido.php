@@ -2,6 +2,7 @@
 // ============================================================
 // api/verificar_pedido.php
 // Verifica se um número de pedido já foi lançado no sistema.
+// Verificação GLOBAL — independente de vendedor e data.
 // Retorna JSON: { existe: bool, msg: string }
 // ============================================================
 require_once __DIR__ . '/../config/config.php';
@@ -12,8 +13,6 @@ verificarLogin();
 header('Content-Type: application/json');
 
 $pedido  = trim($_GET['pedido']  ?? '');
-$vid     = (int)($_GET['vid']    ?? 0);
-$data    = $_GET['data']         ?? '';
 $ignorar = trim($_GET['ignorar'] ?? ''); // pedido original ao editar — ignora ele mesmo
 
 if (!$pedido) {
@@ -23,23 +22,17 @@ if (!$pedido) {
 
 $pdo = conectar();
 
-// Busca o pedido em qualquer vendedor e qualquer data
-$sql  = "SELECT vendedor, data FROM reg_vendas WHERE pedido = :pedido";
-$p    = [':pedido' => $pedido];
+// ✅ Verificação global — busca em qualquer vendedor e qualquer data
+$sql = "SELECT vendedor, data FROM reg_vendas WHERE pedido = :pedido";
+$p   = [':pedido' => $pedido];
 
-// Se estiver editando, ignora o próprio pedido original
+// Ao editar: ignora o próprio pedido original para não bloquear a si mesmo
 if ($ignorar) {
     $sql .= " AND pedido != :ignorar";
     $p[':ignorar'] = $ignorar;
 }
 
-// Exclui o próprio vendedor+data apenas para o lançamento novo
-// (mesma combinação já é bloqueada no PHP da confirmação)
-$sql .= " AND NOT (vendedor_id = :vid AND data = :data)";
-$p[':vid']  = $vid;
-$p[':data'] = $data;
-
-$sql .= " GROUP BY vendedor, data ORDER BY data DESC LIMIT 1";
+$sql .= " ORDER BY data DESC LIMIT 1";
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($p);

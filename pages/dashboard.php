@@ -10,6 +10,11 @@ require_once __DIR__ . '/../includes/functions.php';
 
 verificarLogin();
 
+if ($_SESSION['usuario_perfil'] === 'vendedor') {
+    header('Location: ' . BASE_URL . '/pages/vendedor_app.php');
+    exit;
+}
+
 $pdo  = conectar();
 $hoje = date('Y-m-d');
 

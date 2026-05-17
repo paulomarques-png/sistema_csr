@@ -236,8 +236,9 @@ $vendedoresAtivos = $pdo->query(
 $sqlP = "SELECT * FROM produtos WHERE 1=1";
 $parP = [];
 if ($buscaProduto) {
-    $sqlP .= " AND (codigo LIKE :busca OR descricao LIKE :busca)";
-    $parP[':busca'] = "%$buscaProduto%";
+    $sqlP .= " AND (codigo LIKE :busca_cod OR descricao LIKE :busca_desc)";
+    $parP[':busca_cod']  = "%$buscaProduto%";
+    $parP[':busca_desc'] = "%$buscaProduto%";
 }
 $sqlP .= " ORDER BY ativo DESC, descricao ASC";
 $stmtP = $pdo->prepare($sqlP);
@@ -255,8 +256,9 @@ if ($_SESSION['usuario_perfil'] === 'master') {
     ";
     $parU = [];
     if ($buscaUsuario) {
-        $sqlU .= " AND (u.nome LIKE :busca OR u.perfil LIKE :busca)";
-        $parU[':busca'] = "%$buscaUsuario%";
+    $sqlU .= " AND (u.nome LIKE :busca_nome OR u.perfil LIKE :busca_perfil)";
+    $parU[':busca_nome']   = "%$buscaUsuario%";
+    $parU[':busca_perfil'] = "%$buscaUsuario%";
     }
     $sqlU .= " ORDER BY u.ativo DESC, u.nome ASC";
     $stmtU = $pdo->prepare($sqlU);
